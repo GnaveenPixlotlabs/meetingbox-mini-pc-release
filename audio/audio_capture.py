@@ -21,6 +21,22 @@ logger = logging.getLogger("meetingbox.audio")
 
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+DEVICE_AUTH_TOKEN_FILE = os.getenv("DEVICE_AUTH_TOKEN_FILE", "/data/config/device_auth_token").strip()
+
+
+def _load_device_auth_token() -> str:
+  """Prefer the persisted paired-device token file, then fall back to env."""
+  token_file = DEVICE_AUTH_TOKEN_FILE
+  if token_file:
+    path = Path(token_file)
+    try:
+      if path.is_file():
+        token = path.read_text(encoding="utf-8-sig").strip()
+        if token:
+          return token
+    except OSError as exc:
+      logger.warning("Could not read device auth token file %s: %s", path, exc)
+  return os.getenv("DEVICE_AUTH_TOKEN", "").strip()
 
 
 class AudioCaptureService:
@@ -62,8 +78,9 @@ class AudioCaptureService:
       self.upload_audio_timeout_seconds = max(60, int(os.getenv("UPLOAD_AUDIO_TIMEOUT_SECONDS", "1200")))
     except ValueError:
       self.upload_audio_timeout_seconds = 1200
-    # Same token as device-ui: paired device Bearer so uploads get user_id/device_id on the server.
-    self._upload_auth_token = os.getenv("DEVICE_AUTH_TOKEN", "").strip()
+    # Same token as device-ui: paired device Bearer so uploads/command polling
+    # keep working after pairing without copying the token into .env manually.
+    self._upload_auth_token = _load_device_auth_token()
 
     self.audio = pyaudio.PyAudio()
     self.stream: pyaudio.Stream | None = None

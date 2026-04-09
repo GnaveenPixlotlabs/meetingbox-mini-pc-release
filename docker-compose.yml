@@ -55,6 +55,7 @@ services:
       - DEVICE_AUTH_TOKEN=${DEVICE_AUTH_TOKEN:-}
     volumes:
       - ./data/audio:/data/audio
+      - ./data/config:/data/config:ro
     devices:
       - /dev/snd:/dev/snd
     group_add:
