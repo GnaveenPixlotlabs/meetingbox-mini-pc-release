@@ -816,7 +816,17 @@ class AudioCaptureService:
       return up.split(marker)[0].rstrip("/")
     return "http://127.0.0.1:8000"
 
+  MAX_COMMAND_AGE = 60  # seconds — discard commands older than this
+
   def _dispatch_command(self, command: dict) -> None:
+    ts = command.get("ts")
+    if ts is not None:
+      age = time.time() - float(ts)
+      if age > self.MAX_COMMAND_AGE:
+        logger.info(
+          "Skipping stale command %s (%.0fs old)", command.get("action"), age,
+        )
+        return
     action = command.get("action")
     if action == "start_recording":
       session_id = command.get("session_id")

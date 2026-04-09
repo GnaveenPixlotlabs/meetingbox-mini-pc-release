@@ -44,6 +44,13 @@ WS_RECONNECT_DELAY = 3  # seconds
 WS_MAX_RECONNECT_ATTEMPTS = 10
 
 # ============================================================================
+# LOCAL REDIS (receive audio_level / mic_test_level from audio container)
+# ============================================================================
+
+LOCAL_REDIS_HOST = (os.getenv("LOCAL_REDIS_HOST", "") or "").strip() or "redis"
+LOCAL_REDIS_PORT = int(os.getenv("LOCAL_REDIS_PORT", "6379"))
+
+# ============================================================================
 # MICROPHONE (mic test + should match mini-pc/audio capture device)
 # ============================================================================
 

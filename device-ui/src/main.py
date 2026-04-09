@@ -12,6 +12,7 @@ import logging
 import os
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -80,6 +81,8 @@ from config import (
     SHOW_FPS,
     TRANSITION_DURATION,
     DEFAULT_PRIVACY_MODE,
+    LOCAL_REDIS_HOST,
+    LOCAL_REDIS_PORT,
     setup_complete_marker_paths_for_read,
     get_device_auth_token,
     clear_stored_device_auth_token,
@@ -213,6 +216,10 @@ class MeetingBoxApp(App):
         self.ws_task = None
         self._pairing_poll = None
 
+        # Local Redis subscriber (audio_level / mic_test_level from audio container)
+        self._local_redis_thread = None
+        self._local_redis_stop = threading.Event()
+
         # Screen timeout
         self._screen_timeout_minutes = 0  # 0 = never
         self._idle_event = None
@@ -275,6 +282,10 @@ class MeetingBoxApp(App):
 
         # Start WebSocket listener
         self.start_websocket_listener()
+
+        # Start local Redis listener for real-time audio levels from the audio
+        # container (both on the same Docker network).
+        self._start_local_redis_listener()
 
         if SHOW_FPS:
             Clock.schedule_interval(self._log_fps, 1.0)
@@ -450,6 +461,7 @@ class MeetingBoxApp(App):
 
     def on_stop(self):
         logger.info("MeetingBox UI stopping")
+        self._local_redis_stop.set()
         if getattr(self, '_setup_poll', None):
             self._setup_poll.cancel()
         if getattr(self, '_pairing_poll', None):
@@ -602,6 +614,77 @@ class MeetingBoxApp(App):
             logger.error(f"WebSocket error: {e}")
             await asyncio.sleep(5)
             Clock.schedule_once(lambda _: self.start_websocket_listener(), 0)
+
+    # ==================================================================
+    # LOCAL REDIS LISTENER (audio_level / mic_test_level from audio container)
+    # ==================================================================
+
+    _LOCAL_REDIS_EVENT_TYPES = frozenset({
+        'audio_level', 'mic_test_level',
+        'recording_started', 'recording_stopped',
+        'recording_paused', 'recording_resumed',
+    })
+
+    def _start_local_redis_listener(self):
+        if self._local_redis_thread and self._local_redis_thread.is_alive():
+            return
+        self._local_redis_stop.clear()
+        t = threading.Thread(
+            target=self._local_redis_subscriber_loop, daemon=True,
+            name="local-redis-events",
+        )
+        t.start()
+        self._local_redis_thread = t
+
+    def _local_redis_subscriber_loop(self):
+        try:
+            import redis as _redis_mod
+        except ImportError:
+            logger.warning("redis package not installed — local audio levels unavailable")
+            return
+
+        backoff = 1
+        while not self._local_redis_stop.is_set():
+            try:
+                rc = _redis_mod.Redis(
+                    host=LOCAL_REDIS_HOST, port=LOCAL_REDIS_PORT,
+                    decode_responses=True, socket_connect_timeout=5,
+                )
+                rc.ping()
+                logger.info("Local Redis connected (%s:%s) — subscribing to 'events'",
+                            LOCAL_REDIS_HOST, LOCAL_REDIS_PORT)
+                backoff = 1
+                pubsub = rc.pubsub()
+                pubsub.subscribe("events")
+                for msg in pubsub.listen():
+                    if self._local_redis_stop.is_set():
+                        break
+                    if msg["type"] != "message":
+                        continue
+                    try:
+                        event = json.loads(msg["data"])
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    etype = event.get("type")
+                    if etype not in self._LOCAL_REDIS_EVENT_TYPES:
+                        continue
+                    data = event.get("data") or event
+                    handler = {
+                        'audio_level': self.on_audio_level,
+                        'mic_test_level': self.on_mic_test_level,
+                        'recording_started': self.on_recording_started,
+                        'recording_stopped': self.on_recording_stopped,
+                        'recording_paused': self.on_recording_paused,
+                        'recording_resumed': self.on_recording_resumed,
+                    }.get(etype)
+                    if handler:
+                        handler(data)
+            except Exception as e:
+                if not self._local_redis_stop.is_set():
+                    logger.warning("Local Redis error (%s:%s): %s — retrying in %ss",
+                                   LOCAL_REDIS_HOST, LOCAL_REDIS_PORT, e, backoff)
+                    self._local_redis_stop.wait(backoff)
+                    backoff = min(backoff * 2, 30)
 
     # ==================================================================
     # EVENT HANDLERS

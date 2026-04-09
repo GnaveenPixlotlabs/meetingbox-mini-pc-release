@@ -16,6 +16,9 @@ Pillow>=10.2.0
 numpy>=1.24.0
 sounddevice>=0.4.6
 
+# Local Redis (receive audio_level from audio container on same Docker network)
+redis>=5.0.0
+
 # QR Code generation
 qrcode>=7.4.2
 
