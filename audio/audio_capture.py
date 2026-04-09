@@ -931,18 +931,29 @@ class AudioCaptureService:
       except Exception:
         logger.exception("Error handling audio command %s", command)
 
+  def _is_remote_api(self) -> bool:
+    """True when UPLOAD_AUDIO_API_URL points somewhere other than localhost."""
+    url = (self.upload_audio_api_url or "").lower()
+    for local in ("://localhost", "://127.0.0.1", "://host.docker.internal"):
+      if local in url:
+        return False
+    return "://" in url
+
   def run(self) -> None:
     # Re-read token right now (may have been written after __init__)
     self._refresh_auth_token()
 
-    raw_mode = os.getenv("AUDIO_COMMAND_SOURCE", "").strip().lower()
+    explicit_mode = os.getenv("AUDIO_COMMAND_SOURCE", "").strip().lower()
     has_token = bool(self._upload_auth_token)
+    remote_api = self._is_remote_api()
 
     # In a split deployment (mini PC + cloud API), the local Docker Redis
-    # never receives commands published by the remote server.  If a paired
-    # device token exists, HTTP long-poll is the only mode that works.
-    if has_token and raw_mode in ("redis", ""):
-      if raw_mode == "redis":
+    # never receives commands published by the remote server.  HTTP
+    # long-poll is the only mode that works.  run_http_poll() will wait
+    # for a token to appear if the device hasn't been paired yet, so we
+    # can safely enter it even before pairing.
+    if has_token:
+      if explicit_mode == "redis":
         logger.warning(
           "AUDIO_COMMAND_SOURCE=redis but DEVICE_AUTH_TOKEN is set. "
           "Overriding to HTTP long-poll — local Redis cannot receive "
@@ -952,16 +963,22 @@ class AudioCaptureService:
       else:
         logger.info("Using HTTP long-poll (DEVICE_AUTH_TOKEN found).")
       self.run_http_poll()
-    elif raw_mode in ("http", "api", "longpoll"):
+    elif explicit_mode in ("http", "api", "longpoll"):
       self.run_http_poll()
-    elif not has_token and raw_mode in ("redis", ""):
+    elif remote_api and explicit_mode != "redis":
+      # Remote API but no token yet — wait for pairing in HTTP poll loop.
       logger.info(
-        "Command: Redis channel 'commands' on %s (no device token). "
-        "For cloud API + mini PC, pair the device first or set DEVICE_AUTH_TOKEN.",
+        "No device token yet but UPLOAD_AUDIO_API_URL is remote (%s). "
+        "Waiting for pairing — will start HTTP long-poll once token appears.",
+        self.upload_audio_api_url,
+      )
+      self.run_http_poll()
+    else:
+      logger.info(
+        "Command: Redis channel 'commands' on %s. "
+        "For cloud API + mini PC, pair the device or set DEVICE_AUTH_TOKEN.",
         REDIS_HOST,
       )
-      self.run_redis()
-    else:
       self.run_redis()
 
 

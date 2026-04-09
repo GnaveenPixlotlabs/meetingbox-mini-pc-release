@@ -172,16 +172,14 @@ class MicTestScreen(BaseScreen):
         self._last_level_ts = 0.0
         self.level_label.text = 'Starting microphone test...'
         self.level_label.color = COLORS['gray_400']
-        if sd is None or np is None:
-            logger.warning("Mic test: sounddevice/numpy unavailable — install deps and mount /dev/snd")
-            Clock.schedule_once(
-                lambda *_: self._show_mic_error(
-                    'Mic libraries missing — rebuild device-ui image'
-                ),
-                0,
-            )
-            return
-        Clock.schedule_once(lambda _dt: self._open_local_input_stream(), 0)
+
+        if sd is not None and np is not None:
+            Clock.schedule_once(lambda _dt: self._open_local_input_stream(), 0)
+        else:
+            logger.warning("Mic test: sounddevice/numpy unavailable — using backend WS levels only")
+
+        # Always start backend mic test + tick timer so bars work via
+        # WebSocket mic_test_level events even without local sounddevice.
         run_async(self._notify_backend_start())
         if self._wave_event:
             self._wave_event.cancel()
