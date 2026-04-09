@@ -94,10 +94,12 @@ services:
     devices:
       - /dev/dri:/dev/dri
       - /dev/snd:/dev/snd
-    # Host group names → correct GIDs on any machine (fixes renderD128 permission denied)
+    # Host group names (Docker resolves GIDs on this machine). Omit ``render`` here because
+    # some minimal images have no ``render`` group — Docker then fails to start the container.
+    # If EGL logs show renderD128 permission denied, add the group on the host and use
+    # docker-compose.override.yml (see .env.example) to append ``render``.
     group_add:
       - video
-      - render
       - audio
       - input
     networks:
