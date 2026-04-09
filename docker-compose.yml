@@ -78,6 +78,8 @@ services:
       - BACKEND_WS_URL=${BACKEND_WS_URL:-}
       - DASHBOARD_URL=${DASHBOARD_URL:-}
       - DISPLAY=${DISPLAY:-:0}
+      # Match cookie mount below — fixes "Authorization required, but no authorization protocol specified"
+      - XAUTHORITY=/home/uiuser/.Xauthority
       - KIVY_WINDOW=sdl2
       - KIVY_NO_CONSOLELOG=1
       - FULLSCREEN=${FULLSCREEN:-0}
@@ -86,14 +88,18 @@ services:
       - AUDIO_INPUT_DEVICE_NAME=${AUDIO_INPUT_DEVICE_NAME:-}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Host user's X11 cookie (same UID in container as graphical login user, usually 1000)
+      - ${XAUTHORITY_HOST:-${HOME}/.Xauthority}:/home/uiuser/.Xauthority:ro
       - ./data/config:/data/config
     devices:
       - /dev/dri:/dev/dri
       - /dev/snd:/dev/snd
+    # Host group names → correct GIDs on any machine (fixes renderD128 permission denied)
     group_add:
-      - "44"
-      - "109"
+      - video
+      - render
       - audio
+      - input
     networks:
       - appliance-net
 
