@@ -39,9 +39,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create non-root user with host-matching groups for device access
+# `audio` is required for /dev/snd (mic test uses sounddevice → PortAudio → ALSA).
 RUN groupadd -g 44 video 2>/dev/null || true \
     && groupadd -g 105 input 2>/dev/null || true \
-    && useradd -m -u 1000 -s /bin/bash -G video,input uiuser \
+    && useradd -m -u 1000 -s /bin/bash -G video,input,audio uiuser \
     && chown -R uiuser:uiuser /app
 
 # Kivy config: use SDL2 window provider, disable console log

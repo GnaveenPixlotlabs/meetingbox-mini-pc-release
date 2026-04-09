@@ -44,6 +44,13 @@ WS_RECONNECT_DELAY = 3  # seconds
 WS_MAX_RECONNECT_ATTEMPTS = 10
 
 # ============================================================================
+# MICROPHONE (mic test + should match mini-pc/audio capture device)
+# ============================================================================
+
+AUDIO_INPUT_DEVICE_INDEX = (os.getenv("AUDIO_INPUT_DEVICE_INDEX", "") or "").strip()
+AUDIO_INPUT_DEVICE_NAME = (os.getenv("AUDIO_INPUT_DEVICE_NAME", "") or "").strip()
+
+# ============================================================================
 # DISPLAY SETTINGS
 # ============================================================================
 

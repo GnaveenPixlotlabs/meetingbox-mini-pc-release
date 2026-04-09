@@ -13,6 +13,7 @@ aiofiles>=23.2.1
 Pillow>=10.2.0
 
 # Audio capture (mic test)
+numpy>=1.24.0
 sounddevice>=0.4.6
 
 # QR Code generation

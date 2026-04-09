@@ -81,14 +81,18 @@ services:
       - KIVY_NO_CONSOLELOG=1
       - FULLSCREEN=${FULLSCREEN:-0}
       - MOCK_BACKEND=${MOCK_BACKEND:-0}
+      - AUDIO_INPUT_DEVICE_INDEX=${AUDIO_INPUT_DEVICE_INDEX:-}
+      - AUDIO_INPUT_DEVICE_NAME=${AUDIO_INPUT_DEVICE_NAME:-}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./data/config:/data/config
     devices:
       - /dev/dri:/dev/dri
+      - /dev/snd:/dev/snd
     group_add:
       - "44"
       - "109"
+      - audio
     networks:
       - appliance-net
 
