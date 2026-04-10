@@ -152,6 +152,15 @@ def setup_logging():
 setup_logging()
 logger = logging.getLogger(__name__)
 
+if _FULLSCREEN and _W == 1024 and _H == 600:
+    logger.warning(
+        "Kivy window size is default 1024×600 (DISPLAY_WIDTH/DISPLAY_HEIGHT). "
+        "The home UI scales from that baseline, so on a large or ultrawide panel everything "
+        "will look small until you set DISPLAY_WIDTH and DISPLAY_HEIGHT in mini-pc/.env to match "
+        "`xrandr`, then `docker compose up -d --build device-ui` (or set "
+        "MEETINGBOX_SYNC_DISPLAY_FROM_XRANDR=1 in .env to auto-detect via xrandr)."
+    )
+
 # Import async helper (starts background loop on import)
 from async_helper import run_async, get_async_loop
 

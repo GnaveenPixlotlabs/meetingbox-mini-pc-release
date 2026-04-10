@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     xclip \
     xauth \
+    x11-xserver-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -38,6 +39,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Create non-root user with host-matching groups for device access
 # `audio` is required for /dev/snd (mic test uses sounddevice → PortAudio → ALSA).
@@ -57,4 +60,5 @@ ENV PYTHONPATH=/app/src
 USER uiuser
 
 WORKDIR /app/src
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["python", "main.py"]

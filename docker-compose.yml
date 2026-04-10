@@ -92,8 +92,11 @@ services:
       - AUDIO_INPUT_DEVICE_INDEX=${AUDIO_INPUT_DEVICE_INDEX:-}
       - AUDIO_INPUT_DEVICE_NAME=${AUDIO_INPUT_DEVICE_NAME:-}
       # Match physical panel (e.g. ultrawide 3520x1080). Kivy reads these before Window is created.
+      # Defaults are 1024×600 — without overrides, home-screen scaling stays at the small baseline.
       - DISPLAY_WIDTH=${DISPLAY_WIDTH:-1024}
       - DISPLAY_HEIGHT=${DISPLAY_HEIGHT:-600}
+      # Set to 1 to run xrandr inside the container and override DISPLAY_* (needs x11-xserver-utils).
+      - MEETINGBOX_SYNC_DISPLAY_FROM_XRANDR=${MEETINGBOX_SYNC_DISPLAY_FROM_XRANDR:-0}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       # X11 cookie: boot script sets MEETINGBOX_X11_COOKIE (not in .env) so it wins over XAUTHORITY_HOST.
