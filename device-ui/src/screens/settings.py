@@ -26,29 +26,28 @@ from hardware import request_system_poweroff, request_system_reboot
 logger = logging.getLogger(__name__)
 
 
-def _section_header(text):
-    """Create an uppercase gray section header label."""
-    lbl = Label(
-        text=text,
-        font_size=FONT_SIZES['small'],
-        bold=True,
-        color=COLORS['gray_500'],
-        halign='left',
-        valign='bottom',
-        size_hint_y=None,
-        height=28,
-        padding=[16, 0],
-    )
-    lbl.bind(size=lbl.setter('text_size'))
-    return lbl
-
-
 class SettingsScreen(BaseScreen):
     """Scrollable settings screen – PRD §5.11."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._build_ui()
+
+    def _section_header(self, text):
+        """Create an uppercase gray section header label."""
+        lbl = Label(
+            text=text,
+            font_size=self.suf(FONT_SIZES['small']),
+            bold=True,
+            color=COLORS['gray_500'],
+            halign='left',
+            valign='bottom',
+            size_hint_y=None,
+            height=self.suv(28),
+            padding=[self.suh(16), 0],
+        )
+        lbl.bind(size=lbl.setter('text_size'))
+        return lbl
 
     def _build_ui(self):
         root = BoxLayout(orientation='vertical')
@@ -68,14 +67,14 @@ class SettingsScreen(BaseScreen):
         scroll = ScrollView(do_scroll_x=False)
         self.container = GridLayout(
             cols=1,
-            spacing=SPACING['list_item_spacing'],
-            padding=[SPACING['screen_padding'], 8],
+            spacing=self.suv(SPACING['list_item_spacing']),
+            padding=[self.suh(SPACING['screen_padding']), self.suv(8)],
             size_hint_y=None,
         )
         self.container.bind(minimum_height=self.container.setter('height'))
 
         # ---- DEVICE ----
-        self.container.add_widget(_section_header('DEVICE'))
+        self.container.add_widget(self._section_header('DEVICE'))
 
         self.device_name_item = SettingsItem(
             title='Device Name',
@@ -90,11 +89,11 @@ class SettingsScreen(BaseScreen):
             subtitle=f'{DEVICE_MODEL}\nSerial: Loading…',
             mode='info',
         )
-        self.model_item.height = 70
+        self.model_item.height = self.suv(70)
         self.container.add_widget(self.model_item)
 
         # ---- NETWORK ----
-        self.container.add_widget(_section_header('NETWORK'))
+        self.container.add_widget(self._section_header('NETWORK'))
 
         self.wifi_item = SettingsItem(
             title='WiFi',
@@ -105,7 +104,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.wifi_item)
 
         # ---- STORAGE ----
-        self.container.add_widget(_section_header('STORAGE'))
+        self.container.add_widget(self._section_header('STORAGE'))
 
         self.storage_item = SettingsItem(
             title='Storage',
@@ -123,7 +122,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.auto_delete_item)
 
         # ---- SYSTEM ----
-        self.container.add_widget(_section_header('SYSTEM'))
+        self.container.add_widget(self._section_header('SYSTEM'))
 
         self.firmware_item = SettingsItem(
             title='Firmware Version',
@@ -148,7 +147,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.uptime_item)
 
         # ---- PRIVACY ----
-        self.container.add_widget(_section_header('PRIVACY'))
+        self.container.add_widget(self._section_header('PRIVACY'))
 
         self.privacy_item = SettingsItem(
             title='Privacy Mode',
@@ -169,7 +168,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.auto_record_item)
 
         # ---- DISPLAY ----
-        self.container.add_widget(_section_header('DISPLAY'))
+        self.container.add_widget(self._section_header('DISPLAY'))
 
         self.brightness_item = SettingsItem(
             title='Screen Brightness',
@@ -188,7 +187,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.timeout_item)
 
         # ---- AUDIO ----
-        self.container.add_widget(_section_header('AUDIO'))
+        self.container.add_widget(self._section_header('AUDIO'))
 
         self.mic_test_item = SettingsItem(
             title='Microphone Test',
@@ -199,7 +198,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.mic_test_item)
 
         # ---- INTEGRATIONS ----
-        self.container.add_widget(_section_header('INTEGRATIONS'))
+        self.container.add_widget(self._section_header('INTEGRATIONS'))
 
         self.gmail_item = SettingsItem(
             title='Gmail',
@@ -216,7 +215,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.calendar_item)
 
         # ---- MAINTENANCE ----
-        self.container.add_widget(_section_header('MAINTENANCE'))
+        self.container.add_widget(self._section_header('MAINTENANCE'))
 
         self.unpair_account_item = SettingsItem(
             title='Unpair from account',
@@ -251,7 +250,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.reset_item)
 
         # ---- SUPPORT ----
-        self.container.add_widget(_section_header('SUPPORT'))
+        self.container.add_widget(self._section_header('SUPPORT'))
 
         self.support_item = SettingsItem(
             title='Help',
@@ -261,7 +260,7 @@ class SettingsScreen(BaseScreen):
         self.container.add_widget(self.support_item)
 
         # Bottom padding
-        self.container.add_widget(Widget(size_hint_y=None, height=20))
+        self.container.add_widget(Widget(size_hint_y=None, height=self.suv(20)))
 
         scroll.add_widget(self.container)
         root.add_widget(scroll)

@@ -44,16 +44,16 @@ class MeetingDetailScreen(BaseScreen):
         scroll = ScrollView(do_scroll_x=False)
         self.content = BoxLayout(
             orientation='vertical',
-            spacing=SPACING['section_spacing'],
+            spacing=self.suv(SPACING['section_spacing']),
             size_hint_y=None,
-            padding=SPACING['screen_padding'],
+            padding=self.suh(SPACING['screen_padding']),
         )
         self.content.bind(minimum_height=self.content.setter('height'))
 
         self.title_label = Label(
             text='Loading…',
-            font_size=FONT_SIZES['large'],
-            size_hint_y=None, height=28,
+            font_size=self.suf(FONT_SIZES['large']),
+            size_hint_y=None, height=self.suv(28),
             color=COLORS['white'],
             bold=True, halign='left',
         )
@@ -62,8 +62,8 @@ class MeetingDetailScreen(BaseScreen):
 
         self.meta_label = Label(
             text='',
-            font_size=FONT_SIZES['tiny'],
-            size_hint_y=None, height=16,
+            font_size=self.suf(FONT_SIZES['tiny']),
+            size_hint_y=None, height=self.suv(16),
             color=COLORS['gray_500'], halign='left',
         )
         self.meta_label.bind(size=self.meta_label.setter('text_size'))
@@ -71,25 +71,25 @@ class MeetingDetailScreen(BaseScreen):
 
         self.summary_container = BoxLayout(
             orientation='vertical', size_hint_y=None,
-            spacing=SPACING['button_spacing'])
+            spacing=self.suv(SPACING['button_spacing']))
         self.content.add_widget(self.summary_container)
 
         self.actions_container = BoxLayout(
             orientation='vertical', size_hint_y=None,
-            spacing=SPACING['button_spacing'])
+            spacing=self.suv(SPACING['button_spacing']))
         self.content.add_widget(self.actions_container)
 
         self.decisions_container = BoxLayout(
             orientation='vertical', size_hint_y=None,
-            spacing=SPACING['button_spacing'])
+            spacing=self.suv(SPACING['button_spacing']))
         self.content.add_widget(self.decisions_container)
 
         buttons = BoxLayout(
             orientation='horizontal',
-            size_hint_y=None, height=40,
-            spacing=SPACING['button_spacing'],
+            size_hint_y=None, height=self.suv(40),
+            spacing=self.suv(SPACING['button_spacing']),
         )
-        delete_btn = DangerButton(text='DELETE', font_size=FONT_SIZES['small'])
+        delete_btn = DangerButton(text='DELETE', font_size=self.suf(FONT_SIZES['small']))
         delete_btn.bind(on_press=self._on_delete)
         buttons.add_widget(delete_btn)
         self.content.add_widget(buttons)
@@ -135,13 +135,13 @@ class MeetingDetailScreen(BaseScreen):
 
     def _populate_summary(self, summary):
         self.summary_container.clear_widgets()
-        h = Label(text='Report', font_size=FONT_SIZES['medium'],
+        h = Label(text='Report', font_size=self.suf(FONT_SIZES['medium']),
                   size_hint_y=None, height=20, color=COLORS['white'],
                   bold=True, halign='left')
         h.bind(size=h.setter('text_size'))
         self.summary_container.add_widget(h)
         t = Label(text=summary.get('summary', 'No report yet.'),
-                  font_size=FONT_SIZES['body'], size_hint_y=None,
+                  font_size=self.suf(FONT_SIZES['body']), size_hint_y=None,
                   color=COLORS['gray_400'], halign='left', valign='top')
         t.bind(width=lambda w, val: setattr(w, 'text_size', (val, None)))
 
@@ -158,7 +158,7 @@ class MeetingDetailScreen(BaseScreen):
         if not items:
             return
         h = Label(text=f'Actions ({len(items)})',
-                  font_size=FONT_SIZES['medium'],
+                  font_size=self.suf(FONT_SIZES['medium']),
                   size_hint_y=None, height=20, color=COLORS['white'],
                   bold=True, halign='left')
         h.bind(size=h.setter('text_size'))
@@ -175,14 +175,14 @@ class MeetingDetailScreen(BaseScreen):
         if not decisions:
             return
         h = Label(text=f'Decisions ({len(decisions)})',
-                  font_size=FONT_SIZES['medium'],
+                  font_size=self.suf(FONT_SIZES['medium']),
                   size_hint_y=None, height=20, color=COLORS['white'],
                   bold=True, halign='left')
         h.bind(size=h.setter('text_size'))
         self.decisions_container.add_widget(h)
         total = 20
         for d in decisions:
-            dl = Label(text=f'• {d}', font_size=FONT_SIZES['small'],
+            dl = Label(text=f'• {d}', font_size=self.suf(FONT_SIZES['small']),
                        size_hint_y=None, color=COLORS['gray_400'],
                        halign='left', valign='top')
             dl.bind(texture_size=dl.setter('size'))

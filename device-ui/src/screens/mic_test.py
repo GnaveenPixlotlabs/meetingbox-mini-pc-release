@@ -98,7 +98,7 @@ class MicTestScreen(BaseScreen):
 
         instr = Label(
             text='Speak to test your microphone',
-            font_size=FONT_SIZES['medium'],
+            font_size=self.suf(FONT_SIZES['medium']),
             color=COLORS['white'],
             halign='center',
             size_hint=(1, None), height=28,
@@ -115,7 +115,7 @@ class MicTestScreen(BaseScreen):
 
         self.level_label = Label(
             text='Detecting…',
-            font_size=FONT_SIZES['small'] + 2,
+            font_size=self.suf(FONT_SIZES['small'] + 2),
             bold=True,
             color=COLORS['gray_500'],
             halign='center',

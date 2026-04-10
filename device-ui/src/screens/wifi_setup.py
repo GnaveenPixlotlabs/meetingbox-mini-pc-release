@@ -105,7 +105,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
 
         icon = Label(
             text=icon_txt,
-            font_size=FONT_SIZES['medium'],
+            font_size=self.suf(FONT_SIZES['medium']),
             color=icon_color,
             size_hint=(None, 1),
             width=36,
@@ -116,7 +116,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
         mid = BoxLayout(orientation='vertical', spacing=2, size_hint=(1, 1))
         title = Label(
             text=ssid,
-            font_size=FONT_SIZES['medium'],
+            font_size=self.suf(FONT_SIZES['medium']),
             bold=True,
             color=COLORS['white'],
             halign='left',
@@ -135,7 +135,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
             sub_color = COLORS['gray_500']
         sub_l = Label(
             text=sub,
-            font_size=FONT_SIZES['small'],
+            font_size=self.suf(FONT_SIZES['small']),
             color=sub_color,
             halign='left',
             size_hint=(1, None),
@@ -152,7 +152,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
                 right_txt = '🔒'
             right = Label(
                 text=right_txt,
-                font_size=FONT_SIZES['small'],
+                font_size=self.suf(FONT_SIZES['small']),
                 color=COLORS['gray_400'],
                 size_hint=(None, 1),
                 width=28,
@@ -204,7 +204,7 @@ class WiFiSetupScreen(BaseScreen):
             header.add_widget(Widget(size_hint=(None, 1), width=8))
         brand = Label(
             text='MeetingBox',
-            font_size=FONT_SIZES['title'],
+            font_size=self.suf(FONT_SIZES['title']),
             bold=True,
             color=COLORS['white'],
             halign='left',
@@ -219,7 +219,7 @@ class WiFiSetupScreen(BaseScreen):
 
         title = Label(
             text='Connect to WiFi',
-            font_size=FONT_SIZES['huge'],
+            font_size=self.suf(FONT_SIZES['huge']),
             bold=True,
             color=COLORS['white'],
             halign='left',
@@ -231,7 +231,7 @@ class WiFiSetupScreen(BaseScreen):
 
         sub = Label(
             text='Required for calendar sync and email delivery.',
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             color=COLORS['gray_400'],
             halign='left',
             size_hint=(1, None),
@@ -268,7 +268,7 @@ class WiFiSetupScreen(BaseScreen):
         )
         add_link = _AddNetworkLink(
             text='+ Add Network Manually',
-            font_size=FONT_SIZES['small'],
+            font_size=self.suf(FONT_SIZES['small']),
             color=COLORS['blue'],
             halign='left',
             valign='middle',
@@ -281,7 +281,7 @@ class WiFiSetupScreen(BaseScreen):
         rescan = SecondaryButton(
             text='↻  Rescan',
             size_hint=(0.45, 1),
-            font_size=FONT_SIZES['small'],
+            font_size=self.suf(FONT_SIZES['small']),
         )
         rescan.bind(on_press=lambda *_: self._load_networks(rescan=True))
         actions.add_widget(rescan)
@@ -294,14 +294,14 @@ class WiFiSetupScreen(BaseScreen):
         foot = BoxLayout(orientation='horizontal', size_hint=(1, None), height=52, spacing=12)
         back_btn = SecondaryButton(
             text='Back', size_hint=(None, 1), width=100,
-            font_size=FONT_SIZES['medium'])
+            font_size=self.suf(FONT_SIZES['medium']))
         back_btn.bind(on_press=self._on_back)
         foot.add_widget(back_btn)
         foot.add_widget(Widget(size_hint=(1, 1)))
         self._next_btn = PrimaryButton(
             text='Next',
             size_hint=(None, 1), width=120,
-            font_size=FONT_SIZES['medium'],
+            font_size=self.suf(FONT_SIZES['medium']),
         )
         self._next_btn.bind(on_press=self._on_next)
         self._next_btn.disabled = True
@@ -375,7 +375,7 @@ class WiFiSetupScreen(BaseScreen):
         if not self._list.children:
             empty = Label(
                 text='No networks found. Tap Rescan.',
-                font_size=FONT_SIZES['small'],
+                font_size=self.suf(FONT_SIZES['small']),
                 color=COLORS['gray_500'],
                 size_hint=(1, None),
                 height=44,
@@ -431,7 +431,7 @@ class WiFiSetupScreen(BaseScreen):
 
         title = Label(
             text=f'Connect to {ssid}',
-            font_size=FONT_SIZES['title'],
+            font_size=self.suf(FONT_SIZES['title']),
             bold=True,
             color=COLORS['white'],
             halign='left',
@@ -445,7 +445,7 @@ class WiFiSetupScreen(BaseScreen):
             hint_text='Password',
             password=True,
             multiline=False,
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             size_hint=(1, None),
             height=44,
             background_color=COLORS['surface_light'],
@@ -514,7 +514,7 @@ class WiFiSetupScreen(BaseScreen):
 
         card.add_widget(Label(
             text='Add network',
-            font_size=FONT_SIZES['title'],
+            font_size=self.suf(FONT_SIZES['title']),
             bold=True,
             color=COLORS['white'],
             halign='left',
@@ -525,7 +525,7 @@ class WiFiSetupScreen(BaseScreen):
         ssid_in = TextInput(
             hint_text='Network name (SSID)',
             multiline=False,
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             size_hint=(1, None),
             height=40,
             background_color=COLORS['surface_light'],
@@ -549,7 +549,7 @@ class WiFiSetupScreen(BaseScreen):
             hint_text='Password (if required)',
             password=True,
             multiline=False,
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             size_hint=(1, None),
             height=40,
             background_color=COLORS['surface_light'],

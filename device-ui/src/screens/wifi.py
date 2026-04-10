@@ -21,9 +21,26 @@ from components.status_bar import StatusBar
 from components.wifi_network_item import WiFiNetworkItem
 from components.button import SecondaryButton, PrimaryButton
 from components.modal_dialog import ModalDialog
-from config import COLORS, FONT_SIZES, SPACING, BORDER_RADIUS
+from config import (
+    BORDER_RADIUS,
+    COLORS,
+    FONT_SIZES,
+    SPACING,
+    other_screen_horizontal_scale,
+    other_screen_vertical_scale,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _ws_suv(px):
+    v = other_screen_vertical_scale()
+    return max(1, int(round(float(px) * v)))
+
+
+def _ws_suh(px):
+    h = other_screen_horizontal_scale()
+    return max(1, int(round(float(px) * h)))
 
 
 class _WifiSignalStrip(Widget):
@@ -31,7 +48,7 @@ class _WifiSignalStrip(Widget):
 
     def __init__(self, **kwargs):
         kwargs.setdefault("size_hint", (None, None))
-        kwargs.setdefault("size", (56, 30))
+        kwargs.setdefault("size", (_ws_suh(56), _ws_suv(30)))
         super().__init__(**kwargs)
         self._pct = 0
         self._connected = False
@@ -70,11 +87,11 @@ class _WifiSignalStrip(Widget):
 
     def _redraw(self, *_args):
         self.canvas.clear()
-        bar_w = 9
-        gap = 3
-        heights = [7, 12, 17, 22]
-        x0 = self.x + 2
-        bottom = self.y + 3
+        bar_w = _ws_suh(9)
+        gap = _ws_suh(3)
+        heights = [_ws_suv(7), _ws_suv(12), _ws_suv(17), _ws_suv(22)]
+        x0 = self.x + _ws_suh(2)
+        bottom = self.y + _ws_suv(3)
         lit = self._lit_count()
         active_color = self._bar_color()
         dim = COLORS["gray_800"]
@@ -89,7 +106,7 @@ class _WifiSignalStrip(Widget):
                 RoundedRectangle(
                     pos=(x0 + i * (bar_w + gap), bottom),
                     size=(bar_w, h),
-                    radius=[2],
+                    radius=[max(1, _ws_suv(2))],
                 )
 
 
@@ -116,41 +133,45 @@ class WiFiScreen(BaseScreen):
 
         content = BoxLayout(
             orientation='horizontal',
-            padding=SPACING['screen_padding'],
-            spacing=SPACING['section_spacing'],
+            padding=self.suh(SPACING['screen_padding']),
+            spacing=self.suv(SPACING['section_spacing']),
         )
 
-        left = BoxLayout(orientation='vertical', size_hint=(0.7, 1), spacing=SPACING['button_spacing'])
+        left = BoxLayout(
+            orientation='vertical',
+            size_hint=(0.7, 1),
+            spacing=self.suv(SPACING['button_spacing']),
+        )
 
         status_row = BoxLayout(
             orientation='horizontal',
             size_hint=(1, None),
-            height=48,
-            spacing=12,
+            height=self.suv(48),
+            spacing=self.suh(12),
         )
         self.signal_strip = _WifiSignalStrip()
         status_row.add_widget(self.signal_strip)
-        status_col = BoxLayout(orientation='vertical', spacing=2)
+        status_col = BoxLayout(orientation='vertical', spacing=self.suv(2))
         self.status_title = Label(
             text='Wi‑Fi status',
-            font_size=FONT_SIZES['medium'],
+            font_size=self.suf(FONT_SIZES['medium']),
             bold=True,
             color=COLORS['white'],
             halign='left',
             valign='bottom',
             size_hint=(1, None),
-            height=22,
+            height=self.suv(22),
         )
         self.status_title.bind(size=self.status_title.setter('text_size'))
         status_col.add_widget(self.status_title)
         self.status_detail = Label(
             text='Loading…',
-            font_size=FONT_SIZES['small'],
+            font_size=self.suf(FONT_SIZES['small']),
             color=COLORS['gray_400'],
             halign='left',
             valign='top',
             size_hint=(1, None),
-            height=36,
+            height=self.suv(36),
         )
         self.status_detail.bind(size=self.status_detail.setter('text_size'))
         status_col.add_widget(self.status_detail)
@@ -159,7 +180,7 @@ class WiFiScreen(BaseScreen):
 
         scroll = ScrollView(do_scroll_x=False)
         self.networks_container = GridLayout(
-            cols=1, spacing=SPACING['list_item_spacing'], size_hint_y=None)
+            cols=1, spacing=self.suv(SPACING['list_item_spacing']), size_hint_y=None)
         self.networks_container.bind(
             minimum_height=self.networks_container.setter('height'))
         scroll.add_widget(self.networks_container)
@@ -168,7 +189,7 @@ class WiFiScreen(BaseScreen):
         content.add_widget(left)
 
         right = BoxLayout(orientation='vertical', size_hint=(0.3, 1),
-                          spacing=SPACING['button_spacing'])
+                          spacing=self.suv(SPACING['button_spacing']))
         from kivy.uix.widget import Widget
         right.add_widget(Widget(size_hint=(1, 0.6)))
         scan_btn = SecondaryButton(text='SCAN', size_hint=(1, 0.35))
@@ -239,12 +260,12 @@ class WiFiScreen(BaseScreen):
         if not nets:
             hint = Label(
                 text='No networks in list. Tap SCAN or check device Wi‑Fi.',
-                font_size=FONT_SIZES['small'],
+                font_size=self.suf(FONT_SIZES['small']),
                 color=COLORS['gray_500'],
                 halign='left',
                 valign='top',
                 size_hint_y=None,
-                height=56,
+                height=self.suv(56),
             )
             hint.bind(size=hint.setter('text_size'))
             self.networks_container.add_widget(hint)
@@ -283,9 +304,11 @@ class WiFiScreen(BaseScreen):
 
         card = BoxLayout(
             orientation='vertical',
-            size_hint=(None, None), size=(360, 220),
+            size_hint=(None, None),
+            size=(self.suh(360), self.suv(220)),
             pos_hint={'center_x': 0.5, 'center_y': 0.5},
-            padding=16, spacing=10,
+            padding=self.suh(16),
+            spacing=self.suv(10),
         )
         with card.canvas.before:
             Color(*COLORS['surface'])
@@ -297,17 +320,17 @@ class WiFiScreen(BaseScreen):
 
         title = Label(
             text=f'Connect to {ssid}',
-            font_size=FONT_SIZES['title'], bold=True,
+            font_size=self.suf(FONT_SIZES['title']), bold=True,
             color=COLORS['white'], halign='left',
-            size_hint=(1, None), height=28,
+            size_hint=(1, None), height=self.suv(28),
         )
         title.bind(size=title.setter('text_size'))
         card.add_widget(title)
 
         hint = Label(
             text='Enter WiFi password:',
-            font_size=FONT_SIZES['small'], color=COLORS['gray_400'],
-            halign='left', size_hint=(1, None), height=20,
+            font_size=self.suf(FONT_SIZES['small']), color=COLORS['gray_400'],
+            halign='left', size_hint=(1, None), height=self.suv(20),
         )
         hint.bind(size=hint.setter('text_size'))
         card.add_widget(hint)
@@ -316,15 +339,19 @@ class WiFiScreen(BaseScreen):
             hint_text='Password',
             password=True,
             multiline=False,
-            font_size=FONT_SIZES['body'],
-            size_hint=(1, None), height=40,
+            font_size=self.suf(FONT_SIZES['body']),
+            size_hint=(1, None), height=self.suv(40),
             background_color=COLORS['background'],
             foreground_color=COLORS['white'],
             cursor_color=COLORS['blue'],
         )
         card.add_widget(pwd_input)
 
-        btn_row = BoxLayout(size_hint=(1, None), height=50, spacing=SPACING['button_spacing'])
+        btn_row = BoxLayout(
+            size_hint=(1, None),
+            height=self.suv(50),
+            spacing=self.suv(SPACING['button_spacing']),
+        )
         cancel_btn = SecondaryButton(text='CANCEL', size_hint=(0.5, 1))
         connect_btn = PrimaryButton(text='CONNECT', size_hint=(0.5, 1))
 

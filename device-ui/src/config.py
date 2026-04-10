@@ -154,6 +154,46 @@ SPACING = {
     'list_item_spacing': 8,
 }
 
+
+def display_vertical_scale_raw() -> float:
+    """Height vs 600px design baseline (capped)."""
+    return min(max(DISPLAY_HEIGHT / 600.0, 0.72), 2.35)
+
+
+def display_horizontal_scale_raw() -> float:
+    """Width vs 1024px design baseline (capped)."""
+    return min(max(DISPLAY_WIDTH / 1024.0, 0.85), 3.2)
+
+
+# Home uses this factor on top of display scale; other screens use OTHER (20% larger than home).
+HOME_CONTENT_SCALE = 0.7
+OTHER_CONTENT_SCALE = HOME_CONTENT_SCALE * 1.2
+
+
+def home_layout_vertical_scale() -> float:
+    return min(display_vertical_scale_raw(), 2.25) * HOME_CONTENT_SCALE
+
+
+def home_layout_horizontal_scale() -> float:
+    return display_horizontal_scale_raw() * HOME_CONTENT_SCALE
+
+
+def other_screen_vertical_scale() -> float:
+    return min(display_vertical_scale_raw(), 2.25) * OTHER_CONTENT_SCALE
+
+
+def other_screen_horizontal_scale() -> float:
+    return display_horizontal_scale_raw() * OTHER_CONTENT_SCALE
+
+
+def home_center_column_width() -> int:
+    """Wide panels: wide centered column; small panels: nearly full width (before HOME_CONTENT_SCALE)."""
+    side = SPACING["screen_padding"] * 4
+    if DISPLAY_WIDTH <= 1440:
+        return max(360, DISPLAY_WIDTH - side)
+    return min(2200, max(720, int(DISPLAY_WIDTH * 0.56)))
+
+
 # More rounded corners (Apple style)
 BORDER_RADIUS = 14
 

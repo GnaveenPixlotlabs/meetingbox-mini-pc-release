@@ -67,7 +67,7 @@ class SummaryReviewScreen(BaseScreen):
 
         self.summary_tab_btn = SecondaryButton(
             text='Report',
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             size_hint=(0.5, 1),
         )
         self.summary_tab_btn.bind(on_press=lambda _: self._switch_tab('summary'))
@@ -75,7 +75,7 @@ class SummaryReviewScreen(BaseScreen):
 
         self.actions_tab_btn = SecondaryButton(
             text='Actions',
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             size_hint=(0.5, 1),
         )
         self.actions_tab_btn.bind(on_press=lambda _: self._switch_tab('actions'))
@@ -98,7 +98,7 @@ class SummaryReviewScreen(BaseScreen):
 
         self.close_btn = SecondaryButton(
             text='Close',
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             size_hint=(0.4, 1),
         )
         self.close_btn.bind(on_press=self._on_close)
@@ -106,7 +106,7 @@ class SummaryReviewScreen(BaseScreen):
 
         self.execute_btn = PrimaryButton(
             text='Execute Selected',
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             size_hint=(0.6, 1),
         )
         self.execute_btn.bind(on_press=self._on_execute)
@@ -237,7 +237,7 @@ class SummaryReviewScreen(BaseScreen):
         summary_text = self._summary_data.get('summary', 'No report available.')
         lbl = Label(
             text=summary_text,
-            font_size=FONT_SIZES['body'],
+            font_size=self.suf(FONT_SIZES['body']),
             color=COLORS['white'],
             halign='left',
             valign='top',
@@ -252,7 +252,7 @@ class SummaryReviewScreen(BaseScreen):
         if decisions:
             hdr = Label(
                 text='Decisions',
-                font_size=FONT_SIZES['body'],
+                font_size=self.suf(FONT_SIZES['body']),
                 bold=True,
                 color=COLORS['blue'],
                 halign='left',
@@ -264,7 +264,7 @@ class SummaryReviewScreen(BaseScreen):
             for d in decisions:
                 dl = Label(
                     text=f"  - {d}",
-                    font_size=FONT_SIZES['small'],
+                    font_size=self.suf(FONT_SIZES['small']),
                     color=COLORS['gray_300'],
                     halign='left',
                     valign='top',
@@ -298,7 +298,7 @@ class SummaryReviewScreen(BaseScreen):
         if agentic:
             hdr = Label(
                 text='AI actions — tap Execute on any row, or select multiple and use Execute Selected',
-                font_size=FONT_SIZES['small'],
+                font_size=self.suf(FONT_SIZES['small']),
                 bold=True,
                 color=COLORS['blue'],
                 halign='left',
@@ -344,7 +344,7 @@ class SummaryReviewScreen(BaseScreen):
 
                 al = Label(
                     text=text,
-                    font_size=FONT_SIZES['small'] + 1,
+                    font_size=self.suf(FONT_SIZES['small'] + 1),
                     color=color,
                     halign='left',
                     valign='middle',
@@ -368,7 +368,7 @@ class SummaryReviewScreen(BaseScreen):
                 if eff in ('calendar', 'gmail'):
                     run_btn = SecondaryButton(
                         text='Execute',
-                        font_size=FONT_SIZES['small'],
+                        font_size=self.suf(FONT_SIZES['small']),
                         size_hint=(None, None),
                         width=96,
                         height=34,
@@ -389,7 +389,7 @@ class SummaryReviewScreen(BaseScreen):
         elif summary_items:
             hdr = Label(
                 text='Action items from report',
-                font_size=FONT_SIZES['body'],
+                font_size=self.suf(FONT_SIZES['body']),
                 bold=True,
                 color=COLORS['blue'],
                 halign='left',
@@ -406,7 +406,7 @@ class SummaryReviewScreen(BaseScreen):
                     'with the report when you are signed in and integrations are connected. '
                     'If the AI Actions list is still empty, connect accounts in the web app or reopen this screen.'
                 ),
-                font_size=FONT_SIZES['small'],
+                font_size=self.suf(FONT_SIZES['small']),
                 color=COLORS['gray_500'],
                 halign='left',
                 valign='top',
@@ -427,7 +427,7 @@ class SummaryReviewScreen(BaseScreen):
 
                 al = Label(
                     text=line,
-                    font_size=FONT_SIZES['small'] + 1,
+                    font_size=self.suf(FONT_SIZES['small'] + 1),
                     color=COLORS['gray_300'],
                     halign='left',
                     valign='top',
@@ -443,7 +443,7 @@ class SummaryReviewScreen(BaseScreen):
         else:
             empty = Label(
                 text='No action items found.',
-                font_size=FONT_SIZES['body'],
+                font_size=self.suf(FONT_SIZES['body']),
                 color=COLORS['gray_500'],
                 halign='center',
                 size_hint_y=None,

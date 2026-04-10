@@ -9,7 +9,29 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.graphics import Color, RoundedRectangle
-from config import COLORS, FONT_SIZES, BORDER_RADIUS, SPACING
+from config import (
+    BORDER_RADIUS,
+    COLORS,
+    FONT_SIZES,
+    SPACING,
+    other_screen_horizontal_scale,
+    other_screen_vertical_scale,
+)
+
+
+def _mc_suv(px):
+    v = other_screen_vertical_scale()
+    return max(1, int(round(float(px) * v)))
+
+
+def _mc_suh(px):
+    h = other_screen_horizontal_scale()
+    return max(1, int(round(float(px) * h)))
+
+
+def _mc_suf(fs):
+    v = other_screen_vertical_scale()
+    return max(6, int(round(float(fs) * v)))
 
 
 class MeetingCard(ButtonBehavior, BoxLayout):
@@ -24,9 +46,9 @@ class MeetingCard(ButtonBehavior, BoxLayout):
 
         kwargs.setdefault('orientation', 'vertical')
         kwargs.setdefault('size_hint_y', None)
-        kwargs.setdefault('height', 60)
-        kwargs.setdefault('padding', [SPACING['button_spacing'], 8])
-        kwargs.setdefault('spacing', 2)
+        kwargs.setdefault('height', _mc_suv(60))
+        kwargs.setdefault('padding', [_mc_suh(SPACING['button_spacing']), _mc_suv(8)])
+        kwargs.setdefault('spacing', _mc_suv(2))
 
         super().__init__(**kwargs)
 
@@ -43,7 +65,7 @@ class MeetingCard(ButtonBehavior, BoxLayout):
         # Title
         title = Label(
             text=meeting['title'],
-            font_size=FONT_SIZES['medium'],
+            font_size=_mc_suf(FONT_SIZES['medium']),
             color=COLORS['white'],
             bold=True,
             halign='left', valign='top',
@@ -55,7 +77,7 @@ class MeetingCard(ButtonBehavior, BoxLayout):
         # Metadata
         meta = Label(
             text=self._format_meta(),
-            font_size=FONT_SIZES['small'],
+            font_size=_mc_suf(FONT_SIZES['small']),
             color=COLORS['gray_500'],
             halign='left', valign='top',
             size_hint=(1, 0.3),
@@ -68,7 +90,7 @@ class MeetingCard(ButtonBehavior, BoxLayout):
         if pending > 0:
             pa = Label(
                 text=f"⚡ {pending} pending action{'s' if pending > 1 else ''}",
-                font_size=FONT_SIZES['small'],
+                font_size=_mc_suf(FONT_SIZES['small']),
                 color=COLORS['yellow'],
                 halign='left', valign='top',
                 size_hint=(1, 0.25),

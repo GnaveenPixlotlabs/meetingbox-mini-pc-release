@@ -12,8 +12,29 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.graphics import Color, RoundedRectangle
-from config import COLORS, FONT_SIZES, SPACING, BORDER_RADIUS
+from config import (
+    BORDER_RADIUS,
+    COLORS,
+    FONT_SIZES,
+    other_screen_horizontal_scale,
+    other_screen_vertical_scale,
+)
 from components.toggle_switch import ToggleSwitch
+
+
+def _si_suv(px):
+    v = other_screen_vertical_scale()
+    return max(1, int(round(float(px) * v)))
+
+
+def _si_suh(px):
+    h = other_screen_horizontal_scale()
+    return max(1, int(round(float(px) * h)))
+
+
+def _si_suf(fs):
+    v = other_screen_vertical_scale()
+    return max(6, int(round(float(fs) * v)))
 
 
 class SettingsItem(ButtonBehavior, BoxLayout):
@@ -36,9 +57,9 @@ class SettingsItem(ButtonBehavior, BoxLayout):
 
         kwargs.setdefault('orientation', 'horizontal')
         kwargs.setdefault('size_hint_y', None)
-        kwargs.setdefault('height', 60)
-        kwargs.setdefault('padding', [16, 8])
-        kwargs.setdefault('spacing', 8)
+        kwargs.setdefault('height', _si_suv(60))
+        kwargs.setdefault('padding', [_si_suh(16), _si_suv(8)])
+        kwargs.setdefault('spacing', _si_suh(8))
 
         super().__init__(**kwargs)
 
@@ -60,12 +81,12 @@ class SettingsItem(ButtonBehavior, BoxLayout):
         text_box = BoxLayout(
             orientation='vertical',
             size_hint=(0.75, 1),
-            spacing=2,
+            spacing=_si_suv(2),
         )
 
         self.title_label = Label(
             text=title,
-            font_size=FONT_SIZES['small'] + 2,
+            font_size=_si_suf(FONT_SIZES['small'] + 2),
             color=COLORS['white'],
             halign='left',
             valign='bottom',
@@ -76,7 +97,7 @@ class SettingsItem(ButtonBehavior, BoxLayout):
 
         self.subtitle_label = Label(
             text=subtitle,
-            font_size=FONT_SIZES['small'],
+            font_size=_si_suf(FONT_SIZES['small']),
             color=COLORS['gray_500'],
             halign='left',
             valign='top',
@@ -91,7 +112,7 @@ class SettingsItem(ButtonBehavior, BoxLayout):
         if mode == 'arrow':
             arrow = Label(
                 text='→',
-                font_size=FONT_SIZES['large'],
+                font_size=_si_suf(FONT_SIZES['large']),
                 color=COLORS['gray_500'],
                 size_hint=(0.15, 1),
             )
@@ -101,7 +122,7 @@ class SettingsItem(ButtonBehavior, BoxLayout):
                 active=active,
                 on_toggle=on_toggle,
                 size_hint=(None, None),
-                size=(52, 30),
+                size=(_si_suh(52), _si_suv(30)),
                 pos_hint={'center_y': 0.5},
             )
             self.add_widget(self.toggle)

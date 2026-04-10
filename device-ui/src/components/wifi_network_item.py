@@ -8,7 +8,29 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.graphics import Color, RoundedRectangle
-from config import COLORS, FONT_SIZES, SPACING, BORDER_RADIUS
+from config import (
+    BORDER_RADIUS,
+    COLORS,
+    FONT_SIZES,
+    SPACING,
+    other_screen_horizontal_scale,
+    other_screen_vertical_scale,
+)
+
+
+def _wn_suv(px):
+    v = other_screen_vertical_scale()
+    return max(1, int(round(float(px) * v)))
+
+
+def _wn_suh(px):
+    h = other_screen_horizontal_scale()
+    return max(1, int(round(float(px) * h)))
+
+
+def _wn_suf(fs):
+    v = other_screen_vertical_scale()
+    return max(6, int(round(float(fs) * v)))
 
 
 class WiFiNetworkItem(ButtonBehavior, BoxLayout):
@@ -23,9 +45,9 @@ class WiFiNetworkItem(ButtonBehavior, BoxLayout):
 
         kwargs.setdefault('orientation', 'horizontal')
         kwargs.setdefault('size_hint_y', None)
-        kwargs.setdefault('height', 48)
-        kwargs.setdefault('padding', [SPACING['button_spacing'], 6])
-        kwargs.setdefault('spacing', 8)
+        kwargs.setdefault('height', _wn_suv(48))
+        kwargs.setdefault('padding', [_wn_suh(SPACING['button_spacing']), _wn_suv(6)])
+        kwargs.setdefault('spacing', _wn_suh(8))
 
         super().__init__(**kwargs)
 
@@ -41,7 +63,7 @@ class WiFiNetworkItem(ButtonBehavior, BoxLayout):
         # SSID
         ssid = Label(
             text=network['ssid'],
-            font_size=FONT_SIZES['medium'],
+            font_size=_wn_suf(FONT_SIZES['medium']),
             color=COLORS['white'],
             bold=network.get('connected', False),
             halign='left',
@@ -67,7 +89,7 @@ class WiFiNetworkItem(ButtonBehavior, BoxLayout):
             sig_color = COLORS['gray_500']
         sig_label = Label(
             text=bars,
-            font_size=FONT_SIZES['medium'],
+            font_size=_wn_suf(FONT_SIZES['medium']),
             color=sig_color,
             size_hint=(0.2, 1),
         )
@@ -77,7 +99,7 @@ class WiFiNetworkItem(ButtonBehavior, BoxLayout):
         if network.get('connected'):
             ok = Label(
                 text='✓',
-                font_size=FONT_SIZES['medium'],
+                font_size=_wn_suf(FONT_SIZES['medium']),
                 color=COLORS['green'],
                 size_hint=(0.15, 1),
             )

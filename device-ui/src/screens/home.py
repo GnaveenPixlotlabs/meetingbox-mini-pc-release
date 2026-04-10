@@ -16,33 +16,20 @@ from kivy.uix.widget import Widget
 
 from async_helper import run_async
 from components.button import PrimaryButton
-from config import ASSETS_DIR, COLORS, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_SIZES, SPACING
+from config import (
+    ASSETS_DIR,
+    COLORS,
+    FONT_SIZES,
+    HOME_CONTENT_SCALE,
+    SPACING,
+    home_center_column_width,
+    home_layout_horizontal_scale,
+    home_layout_vertical_scale,
+)
 from screens.base_screen import BaseScreen
 
 _CHIP_SIZE = 34
 _ICON_SIZE = 16
-
-
-def _home_vertical_scale() -> float:
-    """Scale from Figma baseline height 600px (capped for very tall/short panels)."""
-    return min(max(DISPLAY_HEIGHT / 600.0, 0.72), 2.35)
-
-
-def _home_horizontal_scale() -> float:
-    """Scale from design width 1024px (capped so typography/badges stay bounded on very wide 8K+)."""
-    return min(max(DISPLAY_WIDTH / 1024.0, 0.85), 3.2)
-
-
-def _home_center_column_width() -> int:
-    """Wide panels: use most of the width (still centered); small panels: nearly full width."""
-    side = SPACING["screen_padding"] * 4
-    if DISPLAY_WIDTH <= 1440:
-        return max(360, DISPLAY_WIDTH - side)
-    # Ultrawide (e.g. 3520×1080): ~56% width, up to 2200px — reduces huge side gutters.
-    return min(2200, max(720, int(DISPLAY_WIDTH * 0.56)))
-
-# Applied after display-based sv/sh (1.0 = prior sizing). 0.7 ≈ 30% smaller overall on home.
-_HOME_CONTENT_SCALE = 0.7
 
 # Calendar action titles often include "… - April 4th …" while we also format start on line 2.
 _DATEISH_TAIL_RE = re.compile(
@@ -184,13 +171,10 @@ class HomeScreen(BaseScreen):
         self._build_ui()
 
     def _build_ui(self):
-        # Layout scales from 1024×600; sv/sh follow display size (soft caps only for extreme DPI).
-        sv = min(_home_vertical_scale(), 2.25)
-        sh = _home_horizontal_scale()
-        col_w = _home_center_column_width()
-        sv *= _HOME_CONTENT_SCALE
-        sh *= _HOME_CONTENT_SCALE
-        col_w = max(360, int(col_w * _HOME_CONTENT_SCALE))
+        # Layout scales from 1024×600; home uses HOME_CONTENT_SCALE vs raw display scale.
+        sv = home_layout_vertical_scale()
+        sh = home_layout_horizontal_scale()
+        col_w = max(360, int(home_center_column_width() * HOME_CONTENT_SCALE))
         chip_sz = max(_CHIP_SIZE, int(_CHIP_SIZE * sv))
         icon_in = max(_ICON_SIZE, int(_ICON_SIZE * sv))
         top_h = max(50, int(62 * sv))

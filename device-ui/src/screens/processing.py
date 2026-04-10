@@ -49,43 +49,48 @@ class ProcessingScreen(BaseScreen):
         col = BoxLayout(
             orientation="vertical",
             size_hint=(None, None),
-            width=420,
-            height=200,
-            spacing=12,
+            width=self.suh(420),
+            height=self.suv(200),
+            spacing=self.suv(12),
         )
 
         self.spinner_label = Label(
             text=_SPINNER_FRAMES[0],
-            font_size=44,
+            font_size=self.suf(44),
             color=COLORS["white"],
             halign="center",
             valign="middle",
             size_hint=(1, None),
-            height=52,
+            height=self.suv(52),
         )
         self.spinner_label.bind(size=self.spinner_label.setter("text_size"))
         col.add_widget(self.spinner_label)
 
         self.status_label = Label(
             text="Transcribing and building your meeting report…",
-            font_size=FONT_SIZES["medium"],
+            font_size=self.suf(FONT_SIZES["medium"]),
             color=COLORS["white"],
             halign="center",
             valign="middle",
             size_hint=(1, None),
-            height=32,
+            height=self.suv(32),
         )
         self.status_label.bind(size=self.status_label.setter("text_size"))
         col.add_widget(self.status_label)
 
-        self.pb_row = BoxLayout(size_hint=(1, None), height=22, padding=[48, 0], opacity=0)
+        self.pb_row = BoxLayout(
+            size_hint=(1, None),
+            height=self.suv(22),
+            padding=[self.suh(48), 0],
+            opacity=0,
+        )
         self.progress_bar = ProgressBar(max=100, value=0, size_hint=(1, 1))
         self.pb_row.add_widget(self.progress_bar)
         col.add_widget(self.pb_row)
 
         self.pct_label = Label(
             text="",
-            font_size=FONT_SIZES["small"],
+            font_size=self.suf(FONT_SIZES["small"]),
             color=COLORS["gray_400"],
             halign="center",
             size_hint=(1, None),
@@ -99,22 +104,22 @@ class ProcessingScreen(BaseScreen):
 
         self.meeting_label = Label(
             text="Meeting: Untitled\nDuration: 0 minutes",
-            font_size=FONT_SIZES["small"] + 2,
+            font_size=self.suf(FONT_SIZES["small"] + 2),
             color=COLORS["gray_500"],
             halign="center",
             size_hint=(1, None),
-            height=40,
+            height=self.suv(40),
         )
         self.meeting_label.bind(size=self.meeting_label.setter("text_size"))
         root.add_widget(self.meeting_label)
 
         self.eta_label = Label(
             text="",
-            font_size=FONT_SIZES["small"],
+            font_size=self.suf(FONT_SIZES["small"]),
             color=COLORS["gray_500"],
             halign="center",
             size_hint=(1, None),
-            height=22,
+            height=self.suv(22),
         )
         self.eta_label.bind(size=self.eta_label.setter("text_size"))
         root.add_widget(self.eta_label)
@@ -173,7 +178,7 @@ class ProcessingScreen(BaseScreen):
             self.pb_row.opacity = 1
             self.pct_label.opacity = 1
             self.pct_label.size_hint_y = None
-            self.pct_label.height = 18
+            self.pct_label.height = self.suv(18)
             self.progress_bar.value = max(0, min(100, int(progress)))
             self.pct_label.text = f"{int(progress)}%"
         else:
