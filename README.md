@@ -73,7 +73,9 @@ The unit enables `meetingbox-appliance.service` on **`graphical.target`**, sets 
 
 Configure **automatic login** so GDM creates that session at boot; otherwise log in once on the panel after each reboot before the wait window (about two minutes) expires.
 
-For a “single app” feel, hide or disable the host desktop panel/taskbar in your distro settings (MeetingBox still runs fullscreen in its own window).
+For a “single app” feel, hide or disable the host desktop panel/taskbar in your distro settings (MeetingBox still runs fullscreen in its own window). You will still see the Ubuntu desktop **briefly** while GNOME starts; that is normal unless you replace the session with a minimal window manager.
+
+The boot script runs **`docker compose up -d` once** (no immediate `--force-recreate` of the UI) so the fullscreen app is not stopped and restarted a second time on every boot.
 
 ## Splitting into its own git repository
 
