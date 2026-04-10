@@ -475,8 +475,9 @@ class HomeScreen(BaseScreen):
 
     def _update_clock_labels(self):
         now = display_now()
-        self.top_time_label.text = now.strftime("%H:%M")
-        self.big_time_label.text = now.strftime("%H:%M")
+        t12 = now.strftime("%I:%M %p")
+        self.top_time_label.text = t12
+        self.big_time_label.text = t12
         self.date_label.text = f"{now.strftime('%A, %B')} {now.day}"
 
     def _load_system_status(self):

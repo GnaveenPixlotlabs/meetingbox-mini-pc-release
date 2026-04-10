@@ -615,7 +615,7 @@ class RecordingScreen(BaseScreen):
         self.waveform.set_levels([2] * _Waveform.NUM_BARS)
 
         now = display_now()
-        self._paused_at_text = now.strftime("%H:%M")
+        self._paused_at_text = now.strftime("%I:%M %p")
         self.paused_title.text = f"Paused at {self._paused_at_text}"
         self.paused_duration.text = f"Meeting duration: {self._fmt_time(self.elapsed_seconds)}"
         self.ov_room_label.text = getattr(self.app, "device_name", "MeetingBox")
