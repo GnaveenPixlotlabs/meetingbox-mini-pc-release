@@ -91,6 +91,9 @@ services:
       - MOCK_BACKEND=${MOCK_BACKEND:-0}
       - AUDIO_INPUT_DEVICE_INDEX=${AUDIO_INPUT_DEVICE_INDEX:-}
       - AUDIO_INPUT_DEVICE_NAME=${AUDIO_INPUT_DEVICE_NAME:-}
+      # Match physical panel (e.g. ultrawide 3520x1080). Kivy reads these before Window is created.
+      - DISPLAY_WIDTH=${DISPLAY_WIDTH:-1024}
+      - DISPLAY_HEIGHT=${DISPLAY_HEIGHT:-600}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       # X11 cookie: boot script sets MEETINGBOX_X11_COOKIE (not in .env) so it wins over XAUTHORITY_HOST.

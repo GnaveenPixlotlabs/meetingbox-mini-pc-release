@@ -16,11 +16,29 @@ from kivy.uix.widget import Widget
 
 from async_helper import run_async
 from components.button import PrimaryButton
-from config import ASSETS_DIR, COLORS, FONT_SIZES, SPACING
+from config import ASSETS_DIR, COLORS, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_SIZES, SPACING
 from screens.base_screen import BaseScreen
 
 _CHIP_SIZE = 34
 _ICON_SIZE = 16
+
+
+def _home_vertical_scale() -> float:
+    """Scale from Figma baseline height 600px (capped for very tall/short panels)."""
+    return min(max(DISPLAY_HEIGHT / 600.0, 0.72), 2.35)
+
+
+def _home_horizontal_scale() -> float:
+    """Scale from design width 1024px (capped so buttons do not span entire ultrawide)."""
+    return min(max(DISPLAY_WIDTH / 1024.0, 0.85), 2.0)
+
+
+def _home_center_column_width() -> int:
+    """Ultrawide: capped centered column; ≤1440px wide panels: use almost full width."""
+    side = SPACING["screen_padding"] * 4
+    if DISPLAY_WIDTH <= 1440:
+        return max(360, DISPLAY_WIDTH - side)
+    return min(1200, max(560, int(DISPLAY_WIDTH * 0.34)))
 
 # Calendar action titles often include "… - April 4th …" while we also format start on line 2.
 _DATEISH_TAIL_RE = re.compile(
@@ -77,6 +95,7 @@ class _IconChip(ButtonBehavior, FloatLayout):
     """Fixed-size circle chip with a centered tintable icon."""
 
     def __init__(self, icon_source: Path, **kwargs):
+        icon_inner = int(kwargs.pop("icon_inner", _ICON_SIZE))
         kwargs.setdefault("size_hint", (None, None))
         kwargs.setdefault("size", (_CHIP_SIZE, _CHIP_SIZE))
         super().__init__(**kwargs)
@@ -90,7 +109,7 @@ class _IconChip(ButtonBehavior, FloatLayout):
             source=str(icon_source),
             color=COLORS["white"],
             size_hint=(None, None),
-            size=(_ICON_SIZE, _ICON_SIZE),
+            size=(icon_inner, icon_inner),
             allow_stretch=True,
             keep_ratio=True,
         )
@@ -160,6 +179,35 @@ class HomeScreen(BaseScreen):
         self._build_ui()
 
     def _build_ui(self):
+        # Layout scales from 1024×600 design; ultrawide gets a centered column + larger type/controls.
+        sv = _home_vertical_scale()
+        sh = _home_horizontal_scale()
+        col_w = _home_center_column_width()
+        chip_sz = max(_CHIP_SIZE, int(_CHIP_SIZE * min(sv, 1.38)))
+        icon_in = max(_ICON_SIZE, int(_ICON_SIZE * min(sv, 1.38)))
+        top_h = max(50, int(62 * min(sv, 1.25)))
+        top_pad_v = max(8, int(12 * min(sv, 1.15)))
+        room_icon_px = max(22, int(26 * min(sv, 1.25)))
+        icon_holder_w = max(32, int(38 * min(sv, 1.15)))
+        room_fs = int(FONT_SIZES["medium"] * min(sv, 1.25))
+        ttw = max(72, int(86 * min(sv, 1.15)))
+        tth = max(28, int(34 * min(sv, 1.15)))
+        tfs = int(FONT_SIZES["body"] * min(sv, 1.15))
+        tr = max(10, int(14 * min(sv, 1.1)))
+        bfs = int(104 * sv)
+        bfh = max(96, int(124 * sv))
+        dfs = int(FONT_SIZES["body"] * min(sv, 1.35))
+        dfh = max(22, int(26 * sv))
+        ufs = int(FONT_SIZES["medium"] * min(sv, 1.3))
+        ufh = max(44, int(52 * sv))
+        stats_spacing = max(6, int(8 * sv))
+        stats_col_h = max(58, int(66 * sv))
+        btn_w = min(720, int(440 * min(sh, 1.85)))
+        btn_h = max(56, int(70 * sv))
+        btn_row_h = max(72, int(88 * sv))
+        btn_pad_b = max(14, int(22 * sv))
+        start_fs = int(FONT_SIZES["large"] * min(sv, 1.25))
+
         root = BoxLayout(orientation="vertical")
         with root.canvas.before:
             Color(0.04, 0.06, 0.10, 1)
@@ -172,16 +220,16 @@ class HomeScreen(BaseScreen):
         top = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
-            height=62,
-            padding=[SPACING["screen_padding"], 12],
+            height=top_h,
+            padding=[SPACING["screen_padding"], top_pad_v],
             spacing=10,
         )
         left = BoxLayout(orientation="horizontal", size_hint=(0.50, 1), spacing=6)
-        icon_holder = AnchorLayout(size_hint=(None, 1), width=38)
+        icon_holder = AnchorLayout(size_hint=(None, 1), width=icon_holder_w)
         self.room_icon = Image(
             source=str(self._room_icon),
             size_hint=(None, None),
-            size=(26, 26),
+            size=(room_icon_px, room_icon_px),
             allow_stretch=True,
             keep_ratio=True,
         )
@@ -189,7 +237,7 @@ class HomeScreen(BaseScreen):
         left.add_widget(icon_holder)
         self.room_label = Label(
             text="MeetingBox",
-            font_size=FONT_SIZES["medium"],
+            font_size=room_fs,
             color=COLORS["white"],
             bold=True,
             halign="left",
@@ -204,10 +252,10 @@ class HomeScreen(BaseScreen):
 
         self.top_time_label = Label(
             text="--:--",
-            font_size=FONT_SIZES["body"],
+            font_size=tfs,
             color=COLORS["white"],
             size_hint=(None, None),
-            size=(86, 34),
+            size=(ttw, tth),
             halign="center",
             valign="middle",
         )
@@ -215,7 +263,7 @@ class HomeScreen(BaseScreen):
         with self.top_time_label.canvas.before:
             Color(*COLORS["surface"])
             self._time_bg = RoundedRectangle(
-                pos=self.top_time_label.pos, size=self.top_time_label.size, radius=[14]
+                pos=self.top_time_label.pos, size=self.top_time_label.size, radius=[tr]
             )
         self.top_time_label.bind(
             pos=lambda w, _: setattr(self._time_bg, "pos", w.pos),
@@ -223,17 +271,23 @@ class HomeScreen(BaseScreen):
         )
         right.add_widget(self.top_time_label)
 
-        self.wifi_chip = _IconChip(self._wifi_icon)
+        self.wifi_chip = _IconChip(
+            self._wifi_icon, size=(chip_sz, chip_sz), icon_inner=icon_in
+        )
         self.wifi_chip.bind(on_press=lambda *_: self.goto("wifi", transition="slide_left"))
         right.add_widget(self.wifi_chip)
 
-        self.mic_chip = _IconChip(self._mic_icon)
+        self.mic_chip = _IconChip(
+            self._mic_icon, size=(chip_sz, chip_sz), icon_inner=icon_in
+        )
         self.mic_chip.bind(on_press=lambda *_: self.goto("mic_test", transition="slide_left"))
         right.add_widget(self.mic_chip)
 
         gear_path = ASSETS_DIR / "recording" / "setteing gear icon.png"
         if gear_path.exists():
-            self.settings_btn = _IconChip(gear_path)
+            self.settings_btn = _IconChip(
+                gear_path, size=(chip_sz, chip_sz), icon_inner=icon_in
+            )
         else:
             self.settings_btn = _RoundTextChip("⚙")
         self.settings_btn.bind(on_press=lambda *_: self.goto("settings", transition="slide_left"))
@@ -241,67 +295,77 @@ class HomeScreen(BaseScreen):
         top.add_widget(right)
         root.add_widget(top)
 
-        root.add_widget(Widget(size_hint=(1, None), height=18))
+        root.add_widget(Widget(size_hint=(1, None), height=max(12, int(18 * min(sv, 1.1)))))
+
+        mid_row = BoxLayout(orientation="horizontal", size_hint=(1, 1))
+        mid_row.add_widget(Widget(size_hint=(1, 1)))
+
+        inner = BoxLayout(orientation="vertical", size_hint=(None, 1), width=col_w)
+
+        inner.add_widget(Widget())
 
         self.big_time_label = Label(
             text="--:--",
-            font_size=104,
+            font_size=bfs,
             bold=True,
             color=COLORS["white"],
             size_hint=(1, None),
-            height=124,
+            height=bfh,
             halign="center",
             valign="middle",
         )
         self.big_time_label.bind(size=self.big_time_label.setter("text_size"))
-        root.add_widget(self.big_time_label)
+        inner.add_widget(self.big_time_label)
 
         self.date_label = Label(
             text="",
-            font_size=FONT_SIZES["body"],
+            font_size=dfs,
             color=COLORS["gray_400"],
             size_hint=(1, None),
-            height=26,
+            height=dfh,
             halign="center",
             valign="middle",
         )
         self.date_label.bind(size=self.date_label.setter("text_size"))
-        root.add_widget(self.date_label)
+        inner.add_widget(self.date_label)
 
         self.upcoming_label = Label(
             text="Loading next meeting…",
-            font_size=FONT_SIZES["medium"],
+            font_size=ufs,
             color=COLORS["gray_400"],
             size_hint=(1, None),
-            height=52,
+            height=ufh,
             halign="center",
             valign="middle",
         )
         self.upcoming_label.bind(size=self.upcoming_label.setter("text_size"))
-        root.add_widget(self.upcoming_label)
-        root.add_widget(Widget(size_hint=(1, None), height=4))
+        inner.add_widget(self.upcoming_label)
+        inner.add_widget(Widget(size_hint=(1, None), height=max(2, int(4 * min(sv, 1.1)))))
 
         stats_col = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=66,
-            spacing=8,
+            height=stats_col_h,
+            spacing=stats_spacing,
             padding=[0, 0],
         )
 
         def _stat_row(dot_color, initial_text, attr_prefix):
+            row_h = max(24, int(28 * sv))
+            badge_w = min(520, int(280 * min(sh, 1.75)))
+            small_fs = int(FONT_SIZES["small"] * min(sv, 1.2))
             row = BoxLayout(
                 orientation="horizontal",
                 size_hint=(1, None),
-                height=28,
+                height=row_h,
                 padding=[SPACING["screen_padding"], 0],
             )
             row.add_widget(Widget())
             badge = BoxLayout(
                 orientation="horizontal",
                 size_hint=(None, None),
-                width=280,
-                height=28,
+                width=badge_w,
+                height=row_h,
                 spacing=6,
                 padding=[10, 0],
             )
@@ -320,15 +384,15 @@ class HomeScreen(BaseScreen):
                 Label(
                     text="●",
                     color=dot_color,
-                    font_size=FONT_SIZES["small"],
+                    font_size=small_fs,
                     size_hint=(None, 1),
-                    width=10,
+                    width=max(8, int(10 * min(sv, 1.1))),
                 )
             )
             lbl = Label(
                 text=initial_text,
                 color=COLORS["gray_500"],
-                font_size=FONT_SIZES["small"],
+                font_size=small_fs,
                 halign="left",
                 valign="middle",
             )
@@ -341,15 +405,15 @@ class HomeScreen(BaseScreen):
 
         _stat_row(COLORS["yellow"], "Today: — pending", "today")
         _stat_row(COLORS["gray_600"], "All open: — pending", "total")
-        root.add_widget(stats_col)
+        inner.add_widget(stats_col)
 
-        root.add_widget(Widget())
+        inner.add_widget(Widget())
 
         btn_row = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
-            height=88,
-            padding=[0, 0, 0, 22],
+            height=btn_row_h,
+            padding=[0, 0, 0, btn_pad_b],
         )
         btn_row.add_widget(Widget())
         if self._start_button_asset.exists():
@@ -358,24 +422,28 @@ class HomeScreen(BaseScreen):
                 allow_stretch=True,
                 keep_ratio=True,
                 size_hint=(None, None),
-                height=70,
-                width=440,
+                height=btn_h,
+                width=btn_w,
             )
         else:
             self.start_btn = PrimaryButton(
                 text="Start Meeting",
-                font_size=FONT_SIZES["large"],
+                font_size=start_fs,
                 halign="center",
                 size_hint=(None, None),
-                height=70,
-                width=440,
+                height=btn_h,
+                width=btn_w,
             )
         self.start_btn.bind(on_press=self._on_start_recording)
         btn_row.add_widget(self.start_btn)
         btn_row.add_widget(Widget())
-        root.add_widget(btn_row)
+        inner.add_widget(btn_row)
 
-        root.add_widget(Widget(size_hint=(1, None), height=10))
+        mid_row.add_widget(inner)
+        mid_row.add_widget(Widget(size_hint=(1, 1)))
+        root.add_widget(mid_row)
+
+        root.add_widget(Widget(size_hint=(1, None), height=max(8, int(10 * sv))))
         root.add_widget(self.build_footer())
 
         self.add_widget(root)
