@@ -171,26 +171,33 @@ class RecordingScreen(BaseScreen):
         col_w = min(col_w, DISPLAY_WIDTH)
         mid_anchor = AnchorLayout(
             size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
             anchor_x="center",
             anchor_y="top",
         )
         content = BoxLayout(orientation="vertical", size_hint=(None, 1), width=col_w)
 
-        # --- top: badge row + centered timer (below, full width) ---
+        # --- top: badge centered; gear in a matching-width column (avoids left/right drift) ---
         top_block = BoxLayout(orientation="vertical", size_hint=(1, None), height=self.suv(128))
 
+        gear_path = _REC_ASSETS / "setteing gear icon.png"
+        self.gear_btn = _ImageButton(
+            source=str(gear_path),
+            size_hint=(None, None),
+            size=(self.suh(32), self.suv(32)),
+            allow_stretch=True,
+            keep_ratio=True,
+        )
+        self.gear_btn.bind(on_press=lambda *_: self.goto("settings", transition="slide_left"))
+
+        gear_col = max(self.suh(44), self.suv(36))
         top_row = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
             height=self.suv(48),
-            padding=[
-                self.suh(SPACING["screen_padding"]),
-                self.suv(8),
-                self.suh(SPACING["screen_padding"]),
-                self.suv(4),
-            ],
-            spacing=self.suh(10),
+            padding=[0, self.suv(8), 0, self.suv(4)],
         )
+        top_row.add_widget(Widget(size_hint=(None, 1), width=gear_col))
 
         self.rec_badge = Image(
             source=str(_REC_ASSETS / "Overlay.png"),
@@ -199,19 +206,18 @@ class RecordingScreen(BaseScreen):
             allow_stretch=True,
             keep_ratio=True,
         )
-        top_row.add_widget(self.rec_badge)
-        top_row.add_widget(Widget())
+        badge_anchor = AnchorLayout(size_hint=(1, 1), anchor_x="center", anchor_y="center")
+        badge_anchor.add_widget(self.rec_badge)
+        top_row.add_widget(badge_anchor)
 
-        gear_path = _REC_ASSETS / "setteing gear icon.png"
-        self.gear_btn = _ImageButton(
-            source=str(gear_path),
-            size_hint=(None, None),
-            size=(self.suv(32), self.suv(32)),
-            allow_stretch=True,
-            keep_ratio=True,
+        gear_anchor = AnchorLayout(
+            size_hint=(None, 1),
+            width=gear_col,
+            anchor_x="right",
+            anchor_y="top",
         )
-        self.gear_btn.bind(on_press=lambda *_: self.goto("settings", transition="slide_left"))
-        top_row.add_widget(self.gear_btn)
+        gear_anchor.add_widget(self.gear_btn)
+        top_row.add_widget(gear_anchor)
         top_block.add_widget(top_row)
 
         timer_anchor = AnchorLayout(
@@ -256,33 +262,22 @@ class RecordingScreen(BaseScreen):
 
         content.add_widget(top_block)
 
-        # --- center waveform ---
+        # --- center waveform (anchor — no flex spacers) ---
         content.add_widget(Widget())
 
-        wave_wrap = BoxLayout(orientation="horizontal", size_hint=(1, None), height=self.suv(200))
-        wave_wrap.add_widget(Widget())
-        self.waveform = _Waveform()
-        wave_wrap.add_widget(self.waveform)
-        wave_wrap.add_widget(Widget())
-        content.add_widget(wave_wrap)
-
-        content.add_widget(Widget())
-
-        # --- bottom buttons (active state) ---
-        self.active_btn_row = BoxLayout(
-            orientation="horizontal",
+        wave_anchor = AnchorLayout(
             size_hint=(1, None),
-            height=self.suv(76),
-            padding=[
-                self.suh(SPACING["screen_padding"] * 3),
-                0,
-                self.suh(SPACING["screen_padding"] * 3),
-                self.suv(18),
-            ],
-            spacing=self.suh(24),
+            height=self.suv(200),
+            anchor_x="center",
+            anchor_y="center",
         )
-        self.active_btn_row.add_widget(Widget())
+        self.waveform = _Waveform()
+        wave_anchor.add_widget(self.waveform)
+        content.add_widget(wave_anchor)
 
+        content.add_widget(Widget())
+
+        # --- bottom buttons (active): fixed-width inner row, centered ---
         pause_path = _REC_ASSETS / "Pause recording button.png"
         self.pause_btn = _ImageButton(
             source=str(pause_path),
@@ -292,7 +287,6 @@ class RecordingScreen(BaseScreen):
             keep_ratio=True,
         )
         self.pause_btn.bind(on_press=self._on_pause)
-        self.active_btn_row.add_widget(self.pause_btn)
 
         end_path = _REC_ASSETS / "end meetingbutton.png"
         self.end_btn = _ImageButton(
@@ -303,9 +297,25 @@ class RecordingScreen(BaseScreen):
             keep_ratio=True,
         )
         self.end_btn.bind(on_press=self._on_stop)
-        self.active_btn_row.add_widget(self.end_btn)
 
-        self.active_btn_row.add_widget(Widget())
+        active_inner = BoxLayout(
+            orientation="horizontal",
+            size_hint=(None, None),
+            height=self.suv(58),
+            spacing=self.suh(24),
+            width=self.suh(268) + self.suh(252) + self.suh(24),
+        )
+        active_inner.add_widget(self.pause_btn)
+        active_inner.add_widget(self.end_btn)
+
+        self.active_btn_row = AnchorLayout(
+            size_hint=(1, None),
+            height=self.suv(76),
+            anchor_x="center",
+            anchor_y="top",
+            padding=[0, 0, 0, self.suv(18)],
+        )
+        self.active_btn_row.add_widget(active_inner)
         content.add_widget(self.active_btn_row)
 
         content.add_widget(Widget(size_hint=(1, None), height=self.suv(12)))
@@ -314,7 +324,11 @@ class RecordingScreen(BaseScreen):
         self.root_layout.add_widget(mid_anchor)
 
         # === PAUSED OVERLAY (hidden initially) ===
-        self.paused_overlay = FloatLayout(size_hint=(1, 1), opacity=0)
+        self.paused_overlay = FloatLayout(
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+            opacity=0,
+        )
         with self.paused_overlay.canvas.before:
             Color(0.04, 0.06, 0.10, 0.92)
             self._ov_bg = Rectangle(pos=self.paused_overlay.pos, size=self.paused_overlay.size)
@@ -325,13 +339,15 @@ class RecordingScreen(BaseScreen):
 
         ov_content = BoxLayout(orientation="vertical", size_hint=(1, 1))
 
+        ov_gear_col = max(self.suh(44), self.suv(36))
         ov_top = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
             height=self.suv(62),
-            padding=[self.suh(SPACING["screen_padding"]), self.suv(12)],
-            spacing=self.suh(10),
+            padding=[0, self.suv(12), 0, 0],
         )
+        ov_top.add_widget(Widget(size_hint=(None, 1), width=ov_gear_col))
+
         self.paused_badge = Image(
             source=str(_REC_ASSETS / "PAUSED icon for top left.png"),
             size_hint=(None, None),
@@ -339,31 +355,39 @@ class RecordingScreen(BaseScreen):
             allow_stretch=True,
             keep_ratio=True,
         )
-        ov_top.add_widget(self.paused_badge)
-        ov_top.add_widget(Widget())
-
-        ov_right = BoxLayout(orientation="vertical", size_hint=(None, 1), width=self.suh(200))
-        self.ov_room_label = Label(
-            text="MeetingBox",
-            font_size=self.suf(FONT_SIZES["small"]),
-            color=COLORS["gray_400"],
-            halign="right",
-            valign="bottom",
-        )
-        self.ov_room_label.bind(size=self.ov_room_label.setter("text_size"))
-        ov_right.add_widget(self.ov_room_label)
-        ov_top.add_widget(ov_right)
+        paused_badge_anchor = AnchorLayout(size_hint=(1, 1), anchor_x="center", anchor_y="center")
+        paused_badge_anchor.add_widget(self.paused_badge)
+        ov_top.add_widget(paused_badge_anchor)
 
         self.ov_gear = _ImageButton(
             source=str(gear_path),
             size_hint=(None, None),
-            size=(self.suv(32), self.suv(32)),
+            size=(self.suh(32), self.suv(32)),
             allow_stretch=True,
             keep_ratio=True,
         )
         self.ov_gear.bind(on_press=lambda *_: self.goto("settings", transition="slide_left"))
-        ov_top.add_widget(self.ov_gear)
+        ov_gear_anchor = AnchorLayout(
+            size_hint=(None, 1),
+            width=ov_gear_col,
+            anchor_x="right",
+            anchor_y="top",
+        )
+        ov_gear_anchor.add_widget(self.ov_gear)
+        ov_top.add_widget(ov_gear_anchor)
         ov_content.add_widget(ov_top)
+
+        self.ov_room_label = Label(
+            text="MeetingBox",
+            font_size=self.suf(FONT_SIZES["small"]),
+            color=COLORS["gray_400"],
+            halign="center",
+            valign="middle",
+            size_hint=(1, None),
+            height=self.suv(22),
+        )
+        self.ov_room_label.bind(size=self.ov_room_label.setter("text_size"))
+        ov_content.add_widget(self.ov_room_label)
 
         ov_content.add_widget(Widget())
 
@@ -394,7 +418,9 @@ class RecordingScreen(BaseScreen):
         ov_content.add_widget(Widget(size_hint=(1, None), height=self.suv(16)))
 
         line_wrap = BoxLayout(
-            size_hint=(1, None), height=self.suv(2), padding=[self.suh(120), 0]
+            size_hint=(1, None),
+            height=self.suv(2),
+            padding=[self.suh(SPACING["screen_padding"] * 2), 0],
         )
         line_w = Widget(size_hint=(1, 1))
         with line_w.canvas:
@@ -410,10 +436,12 @@ class RecordingScreen(BaseScreen):
         ov_content.add_widget(Widget(size_hint=(1, None), height=self.suv(20)))
 
         mic_wrap = BoxLayout(orientation="vertical", size_hint=(1, None), height=self.suv(80))
-        mic_icon_wrap = BoxLayout(
-            orientation="horizontal", size_hint=(1, None), height=self.suv(46)
+        mic_icon_wrap = AnchorLayout(
+            size_hint=(1, None),
+            height=self.suv(46),
+            anchor_x="center",
+            anchor_y="center",
         )
-        mic_icon_wrap.add_widget(Widget())
         mic_circle = FloatLayout(size_hint=(None, None), size=(self.suv(42), self.suv(42)))
         with mic_circle.canvas.before:
             Color(*COLORS["gray_700"])
@@ -435,7 +463,6 @@ class RecordingScreen(BaseScreen):
             size=lambda w, _: self._center_child(mic_icon, w),
         )
         mic_icon_wrap.add_widget(mic_circle)
-        mic_icon_wrap.add_widget(Widget())
         mic_wrap.add_widget(mic_icon_wrap)
 
         mic_label = Label(
@@ -452,18 +479,6 @@ class RecordingScreen(BaseScreen):
 
         ov_content.add_widget(Widget())
 
-        ov_btn_row = BoxLayout(
-            orientation="horizontal",
-            size_hint=(1, None),
-            height=self.suv(76),
-            padding=[
-                self.suh(SPACING["screen_padding"]),
-                0,
-                self.suh(SPACING["screen_padding"]),
-                self.suv(18),
-            ],
-            spacing=0,
-        )
         resume_path = _REC_ASSETS / "resume recording button.png"
         self.resume_btn = _ImageButton(
             source=str(resume_path),
@@ -473,9 +488,6 @@ class RecordingScreen(BaseScreen):
             keep_ratio=True,
         )
         self.resume_btn.bind(on_press=self._on_pause)
-        ov_btn_row.add_widget(self.resume_btn)
-
-        ov_btn_row.add_widget(Widget())
 
         end_paused_path = _REC_ASSETS / "End meeting.png"
         self.end_paused_btn = _ImageButton(
@@ -486,7 +498,25 @@ class RecordingScreen(BaseScreen):
             keep_ratio=True,
         )
         self.end_paused_btn.bind(on_press=self._on_stop)
-        ov_btn_row.add_widget(self.end_paused_btn)
+
+        paused_inner = BoxLayout(
+            orientation="horizontal",
+            size_hint=(None, None),
+            height=self.suv(58),
+            spacing=self.suh(24),
+            width=self.suh(292) + self.suh(252) + self.suh(24),
+        )
+        paused_inner.add_widget(self.resume_btn)
+        paused_inner.add_widget(self.end_paused_btn)
+
+        ov_btn_row = AnchorLayout(
+            size_hint=(1, None),
+            height=self.suv(76),
+            anchor_x="center",
+            anchor_y="top",
+            padding=[0, 0, 0, self.suv(18)],
+        )
+        ov_btn_row.add_widget(paused_inner)
         ov_content.add_widget(ov_btn_row)
         ov_content.add_widget(Widget(size_hint=(1, None), height=self.suv(12)))
 
