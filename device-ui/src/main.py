@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -164,6 +165,78 @@ _PAIRING_UNPAIR_DEFER_SCREENS = frozenset({
 })
 
 
+def _xauthority_has_display_zero(cookie_text: str) -> bool:
+    """True if xauth list output likely includes authority for local display :0."""
+    low = cookie_text.lower()
+    if "unix:0" in low:
+        return True
+    for line in cookie_text.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        fam = parts[0].lower()
+        if fam.endswith(":0") and ":10" not in fam and ":11" not in fam:
+            return True
+    return False
+
+
+def _diagnose_xauthority_for_docker():
+    """Log hints when the mounted cookie cannot authorize DISPLAY=:0 (Docker + local X11)."""
+    if not sys.platform.startswith("linux"):
+        return
+    path = (os.environ.get("XAUTHORITY") or "").strip()
+    disp = (os.environ.get("DISPLAY") or "").strip()
+    if not path:
+        print("[MeetingBox] WARNING: XAUTHORITY is unset — X11 will usually reject the UI.", flush=True)
+        return
+    p = Path(path)
+    if p.is_dir():
+        print(
+            f"[MeetingBox] FATAL: XAUTHORITY is a directory (bad bind). Remove it on the host and use "
+            f"a real cookie file; path was: {path}",
+            flush=True,
+        )
+        return
+    if not p.is_file():
+        return
+    xauth_bin = shutil.which("xauth")
+    if not xauth_bin:
+        return
+    try:
+        r = subprocess.run(
+            [xauth_bin, "-f", path, "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        out = (r.stdout or "").strip()
+        err = (r.stderr or "").strip()
+        if r.returncode != 0:
+            print(
+                f"[MeetingBox] xauth list failed (exit {r.returncode}): {err or out[:400]}",
+                flush=True,
+            )
+            return
+        if not out:
+            print(
+                "[MeetingBox] WARNING: mounted Xauthority file has zero entries — "
+                "mount the desktop user's cookie (see XAUTHORITY_HOST in .env).",
+                flush=True,
+            )
+            return
+        if disp.endswith(":0") and not _xauthority_has_display_zero(out):
+            print(
+                "[MeetingBox] WARNING: this Xauthority file has no :0 / unix:0 entry but "
+                "DISPLAY is :0 (SSH or wrong file often only has :10). "
+                "Fix: from a terminal ON THE BUILT-IN SCREEN run:  xauth list $DISPLAY\n"
+                "then set XAUTHORITY_HOST in .env to that user's ~/.Xauthority or "
+                "/run/user/$(id -u)/gdm/Xauthority",
+                flush=True,
+            )
+    except Exception as ex:
+        logger.debug("xauthority diagnose: %s", ex)
+
+
 # ==================================================================
 # Application
 # ==================================================================
@@ -239,7 +312,18 @@ class MeetingBoxApp(App):
 
         # Show cursor in windowed mode (mouse/desktop).
         # Hide it only in fullscreen kiosk mode (touchscreen, no mouse).
-        Window.show_cursor = (not FULLSCREEN) or SHOW_FPS
+        # If X11 auth failed, SDL never creates a window — show_cursor crashes internally.
+        try:
+            Window.show_cursor = (not FULLSCREEN) or SHOW_FPS
+        except (AttributeError, TypeError) as e:
+            raise RuntimeError(
+                "Kivy window is not connected to X11 (often missing or wrong .Xauthority for "
+                "DISPLAY=:0). On the built-in screen open a terminal and run: "
+                "xhost +local:docker\n"
+                "In ~/meetingbox-mini-pc-release/.env set XAUTHORITY_HOST to the host cookie file "
+                "(often ~/.Xauthority or /run/user/$(id -u)/gdm/Xauthority), then recreate the UI "
+                "container."
+            ) from e
 
         # Screen manager – default to fade transition
         self.screen_manager = ScreenManager(
@@ -296,30 +380,6 @@ class MeetingBoxApp(App):
         # combinations leave it hidden until raised).
         Clock.schedule_once(lambda *_: self._ensure_window_visible(), 0)
         Clock.schedule_once(lambda *_: self._ensure_window_visible(), 0.3)
-
-        # region agent log
-        def _dbg_window(_dt):
-            try:
-                _debug_ndjson(
-                    "H2",
-                    "main.py:MeetingBoxApp.build",
-                    "window_after_build",
-                    {
-                        "size": [float(Window.size[0]), float(Window.size[1])],
-                        "pos": [float(Window.pos[0]), float(Window.pos[1])],
-                        "fullscreen": bool(Window.fullscreen),
-                    },
-                )
-            except Exception as ex:
-                _debug_ndjson(
-                    "H2",
-                    "main.py:MeetingBoxApp.build",
-                    "window_probe_failed",
-                    {"error": str(ex)},
-                )
-
-        Clock.schedule_once(_dbg_window, 0.5)
-        # endregion
 
         logger.info("UI built – starting on splash screen")
         return self.screen_manager
@@ -1043,7 +1103,6 @@ def main():
                 flush=True,
             )
 
-    import subprocess
     try:
         result = subprocess.run(
             ['ls', '-la', '/tmp/.X11-unix/'],
@@ -1051,6 +1110,8 @@ def main():
         print(f"[MeetingBox] X11 socket dir: {result.stdout.strip()}", flush=True)
     except Exception as e:
         print(f"[MeetingBox] X11 socket check failed: {e}", flush=True)
+
+    _diagnose_xauthority_for_docker()
 
     logger.info("Starting MeetingBox Device UI")
     try:

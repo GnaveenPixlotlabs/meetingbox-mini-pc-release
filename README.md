@@ -10,6 +10,7 @@ This folder contains everything that normally runs on the **meeting room device*
 | `audio/` | Mic capture, VAD, WAV upload (`run_audio_capture.sh` + Docker image) |
 | `docker-compose.yml` | Optional: run UI and/or Docker audio on the device |
 | `.env.example` | All appliance env vars — copy to `.env` |
+| `scripts/install-boot-service.sh` | **systemd**: start the Compose stack at boot (kiosk) |
 
 ## Quick start (mini PC only)
 
@@ -51,6 +52,26 @@ docker compose --profile mini-pc --profile docker-audio up -d --build
 ```
 
 If you only set `COMPOSE_PROFILES=mini-pc`, the mic and Redis containers **will not start** (by design).
+
+## Kiosk: fullscreen UI + start on boot
+
+The device-ui image defaults to **borderless fullscreen** (`FULLSCREEN` defaults to `1` in `docker-compose.yml`). Override with `FULLSCREEN=0` in `.env` when developing on a desktop.
+
+**Permanent X11 settings** belong in `.env` on the device (not only in your SSH shell): `DEVICE_UI_DISPLAY`, `XAUTHORITY_HOST`, and `FULLSCREEN=1`. Copy from `.env.example` and adjust the username in `XAUTHORITY_HOST`.
+
+**systemd (after graphical login / auto-login):**
+
+```bash
+cd /path/to/meetingbox-mini-pc-release   # your install dir
+cp .env.example .env   # if needed; edit BACKEND_URL, XAUTHORITY_HOST, etc.
+sudo usermod -aG docker meetingbox        # GUI user; then re-login
+sudo bash scripts/install-boot-service.sh  # optional: pass install dir as first arg
+sudo systemctl start meetingbox-appliance
+```
+
+The unit enables `meetingbox-appliance.service` on **`graphical.target`**, sets `HOME` for Compose, runs `xhost +local:docker`, then `docker compose up -d`. Configure the distro for **automatic login** to the desktop on the built-in screen so X `:0` and `~/.Xauthority` exist before or as the stack starts.
+
+For a “single app” feel, hide or disable the host desktop panel/taskbar in your distro settings (MeetingBox still runs fullscreen in its own window).
 
 ## Splitting into its own git repository
 

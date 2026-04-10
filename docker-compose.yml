@@ -86,7 +86,8 @@ services:
       - SDL_VIDEODRIVER=x11
       - KIVY_WINDOW=sdl2
       - KIVY_NO_CONSOLELOG=1
-      - FULLSCREEN=${FULLSCREEN:-0}
+      # Default 1 = kiosk / single-app panel (borderless fullscreen). Set FULLSCREEN=0 in .env for windowed dev.
+      - FULLSCREEN=${FULLSCREEN:-1}
       - MOCK_BACKEND=${MOCK_BACKEND:-0}
       - AUDIO_INPUT_DEVICE_INDEX=${AUDIO_INPUT_DEVICE_INDEX:-}
       - AUDIO_INPUT_DEVICE_NAME=${AUDIO_INPUT_DEVICE_NAME:-}
