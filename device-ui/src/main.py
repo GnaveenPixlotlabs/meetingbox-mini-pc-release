@@ -53,8 +53,42 @@ from kivy.config import Config
 # Setting position/size/fullscreen after Window exists only partially works and
 # causes the window to render at the wrong position (top-left or bottom-left).
 _FULLSCREEN = os.getenv('FULLSCREEN', '0') == '1'
-_W = int(os.getenv('DISPLAY_WIDTH', '1024'))
-_H = int(os.getenv('DISPLAY_HEIGHT', '600'))
+
+
+def _env_display_int(name: str, default: int) -> int:
+    """Same rules as config._parse_display_px — must not raise; runs before config import."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    s = str(raw).strip()
+    if not s:
+        print(
+            f"[MeetingBox] WARNING: {name} is set but empty; using default {default}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return default
+    try:
+        v = int(s)
+    except ValueError:
+        print(
+            f"[MeetingBox] WARNING: {name}={raw!r} is not an integer; using default {default}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return default
+    if v < 32 or v > 32768:
+        print(
+            f"[MeetingBox] WARNING: {name}={v} out of range [32,32768]; using default {default}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return default
+    return v
+
+
+_W = _env_display_int("DISPLAY_WIDTH", 1024)
+_H = _env_display_int("DISPLAY_HEIGHT", 600)
 
 Config.set('graphics', 'window_state', 'visible')
 Config.set('graphics', 'position', 'custom')
@@ -325,14 +359,12 @@ class MeetingBoxApp(App):
         try:
             Window.show_cursor = (not FULLSCREEN) or SHOW_FPS
         except (AttributeError, TypeError) as e:
-            raise RuntimeError(
-                "Kivy window is not connected to X11 (often missing or wrong .Xauthority for "
-                "DISPLAY=:0). On the built-in screen open a terminal and run: "
-                "xhost +local:docker\n"
-                "In ~/meetingbox-mini-pc-release/.env set XAUTHORITY_HOST to the host cookie file "
-                "(often ~/.Xauthority or /run/user/$(id -u)/gdm/Xauthority), then recreate the UI "
-                "container."
-            ) from e
+            # Do not crash the process: Docker restart loops look like a flickering panel with no UI.
+            logger.error(
+                "Kivy window not ready for show_cursor (X11/auth?). Continuing. "
+                "Fix: xhost +local:docker and correct XAUTHORITY mount. Detail: %s",
+                e,
+            )
 
         # Screen manager – default to fade transition
         self.screen_manager = ScreenManager(

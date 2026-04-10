@@ -1,6 +1,6 @@
 #!/bin/sh
 # Optional: read host X11 resolution so Kivy matches the physical panel (see .env.example).
-set -e
+# Do not use "set -e" — a failed xrandr must not block starting Python.
 if [ "${MEETINGBOX_SYNC_DISPLAY_FROM_XRANDR:-0}" = "1" ]; then
   if command -v xrandr >/dev/null 2>&1; then
     dims=$(xrandr 2>/dev/null | sed -n 's/.*current \([0-9][0-9]*\) x \([0-9][0-9]*\).*/\1 \2/p' | head -n1)

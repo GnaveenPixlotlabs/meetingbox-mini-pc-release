@@ -61,10 +61,31 @@ AUDIO_INPUT_DEVICE_NAME = (os.getenv("AUDIO_INPUT_DEVICE_NAME", "") or "").strip
 # DISPLAY SETTINGS
 # ============================================================================
 
+
+def _parse_display_px(name: str, default: int) -> int:
+    """Env may be unset, empty, or non-numeric (e.g. DISPLAY_WIDTH= in .env) — avoid crashing."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    s = str(raw).strip()
+    if not s:
+        logger.warning("%s is set but empty; using default %s", name, default)
+        return default
+    try:
+        v = int(s)
+    except ValueError:
+        logger.warning("%s=%r is not an integer; using default %s", name, raw, default)
+        return default
+    if v < 32 or v > 32768:
+        logger.warning("%s=%s out of range [32,32768]; using default %s", name, v, default)
+        return default
+    return v
+
+
 # Display resolution
 # Figma-aligned default is 1024x600; override via env vars as needed.
-DISPLAY_WIDTH = int(os.getenv('DISPLAY_WIDTH', '1024'))
-DISPLAY_HEIGHT = int(os.getenv('DISPLAY_HEIGHT', '600'))
+DISPLAY_WIDTH = _parse_display_px("DISPLAY_WIDTH", 1024)
+DISPLAY_HEIGHT = _parse_display_px("DISPLAY_HEIGHT", 600)
 
 # Display orientation
 DISPLAY_ORIENTATION = os.getenv('DISPLAY_ORIENTATION', 'landscape')
