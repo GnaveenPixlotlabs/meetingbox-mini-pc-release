@@ -3,8 +3,7 @@
 #
 #   sudo bash scripts/install-gdm-kiosk-session.sh [/home/meetingbox/meetingbox-mini-pc-release]
 #
-# After install: reboot. Auto-login must target this session (see AccountsService step below).
-# Disable meetingbox-appliance.service if you use only this session (avoids duplicate compose).
+# After install: run install-boot-service.sh, then reboot (see setup-infotainment-kiosk.sh).
 
 set -euo pipefail
 
