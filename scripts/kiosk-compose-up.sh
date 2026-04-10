@@ -100,4 +100,4 @@ export MEETINGBOX_X11_COOKIE="$XAUTH_COPY"
 export DEVICE_UI_DISPLAY="$disp_num"
 # One shot only — do not ``--force-recreate device-ui`` here; that stops the UI right after
 # the first start and looks like “fullscreen then closes and opens again” on the panel.
-exec /usr/bin/docker compose up -d
+/usr/bin/docker compose up -d

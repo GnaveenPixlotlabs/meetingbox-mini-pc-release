@@ -11,6 +11,8 @@ This folder contains everything that normally runs on the **meeting room device*
 | `docker-compose.yml` | Optional: run UI and/or Docker audio on the device |
 | `.env.example` | All appliance env vars — copy to `.env` |
 | `scripts/install-boot-service.sh` | **systemd**: start the Compose stack at boot (kiosk) |
+| `scripts/install-gdm-kiosk-session.sh` | **No GNOME desktop** — black screen + MeetingBox only |
+| `kiosk-desktop/meetingbox-kiosk.desktop` | GDM “MeetingBox Kiosk” session |
 
 ## Quick start (mini PC only)
 
@@ -76,6 +78,23 @@ Configure **automatic login** so GDM creates that session at boot; otherwise log
 For a “single app” feel, hide or disable the host desktop panel/taskbar in your distro settings (MeetingBox still runs fullscreen in its own window). You will still see the Ubuntu desktop **briefly** while GNOME starts; that is normal unless you replace the session with a minimal window manager.
 
 The boot script runs **`docker compose up -d` once** (no immediate `--force-recreate` of the UI) so the fullscreen app is not stopped and restarted a second time on every boot.
+
+### “Firmware-like” boot — no Ubuntu dashboard (recommended for a dedicated panel)
+
+Full **GNOME** (dock, Activities, wallpaper) always adds delay and a visible desktop. For a room device, install a **minimal GDM X session** that shows only a **black screen** and then your **Docker fullscreen UI**:
+
+```bash
+cd /path/to/meetingbox-mini-pc-release
+sudo bash scripts/install-gdm-kiosk-session.sh
+sudo systemctl disable meetingbox-appliance.service   # session runs ``docker compose`` itself
+sudo reboot
+```
+
+The installer adds **`MeetingBox Kiosk`** to the login screen, installs **Openbox** (~2 MB) for window management, writes **`/etc/meetingbox/release`** with your install path, and sets **`XSession=meetingbox-kiosk`** for your auto-login user in **AccountsService**.
+
+You will still see **firmware/BIOS**, then **GDM** for a short moment — eliminating that requires a custom boot splash / OEM image, not an app change.
+
+**Revert to normal Ubuntu desktop:** edit `/var/lib/AccountsService/users/<you>` → `XSession=ubuntu` (or remove the `XSession` line), reboot.
 
 ## Splitting into its own git repository
 
