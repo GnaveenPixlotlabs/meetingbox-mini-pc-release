@@ -253,27 +253,61 @@ class HomeScreen(BaseScreen):
         right = BoxLayout(orientation="horizontal", size_hint=(0.50, 1), spacing=10)
         right.add_widget(Widget())
 
-        self.top_time_label = Label(
-            text="--:--",
-            font_size=tfs,
-            color=COLORS["white"],
+        time_chip_spacing = max(2, int(4 * sh))
+        self.top_time_chip = BoxLayout(
+            orientation="vertical",
             size_hint=(None, None),
             size=(ttw, tth),
-            halign="center",
-            valign="middle",
-            markup=True,
         )
-        self.top_time_label.bind(size=self.top_time_label.setter("text_size"))
-        with self.top_time_label.canvas.before:
+        with self.top_time_chip.canvas.before:
             Color(*COLORS["surface"])
             self._time_bg = RoundedRectangle(
-                pos=self.top_time_label.pos, size=self.top_time_label.size, radius=[tr]
+                pos=self.top_time_chip.pos, size=self.top_time_chip.size, radius=[tr]
             )
-        self.top_time_label.bind(
+        self.top_time_chip.bind(
             pos=lambda w, _: setattr(self._time_bg, "pos", w.pos),
             size=lambda w, _: setattr(self._time_bg, "size", w.size),
         )
-        right.add_widget(self.top_time_label)
+        top_time_center = AnchorLayout(size_hint=(1, 1))
+        top_time_row = BoxLayout(
+            orientation="horizontal",
+            size_hint=(None, None),
+            height=tth,
+            spacing=time_chip_spacing,
+        )
+        self._top_clock_hm = Label(
+            text="--:--",
+            font_size=tfs,
+            color=COLORS["white"],
+            size_hint=(None, 1),
+            halign="right",
+            valign="middle",
+        )
+        self._top_clock_ap = Label(
+            text="",
+            font_size=self._top_ampm_font,
+            color=COLORS["white"],
+            size_hint=(None, 1),
+            halign="left",
+            valign="middle",
+        )
+
+        def _sync_top_clock_row(*_a):
+            self._top_clock_hm.width = max(int(self._top_clock_hm.texture_size[0]), 1)
+            self._top_clock_ap.width = max(int(self._top_clock_ap.texture_size[0]), 1)
+            top_time_row.width = (
+                self._top_clock_hm.width
+                + self._top_clock_ap.width
+                + top_time_row.spacing
+            )
+
+        self._top_clock_hm.bind(texture_size=_sync_top_clock_row)
+        self._top_clock_ap.bind(texture_size=_sync_top_clock_row)
+        top_time_row.add_widget(self._top_clock_hm)
+        top_time_row.add_widget(self._top_clock_ap)
+        top_time_center.add_widget(top_time_row)
+        self.top_time_chip.add_widget(top_time_center)
+        right.add_widget(self.top_time_chip)
 
         self.wifi_chip = _IconChip(
             self._wifi_icon, size=(chip_sz, chip_sz), icon_inner=icon_in
@@ -316,19 +350,53 @@ class HomeScreen(BaseScreen):
 
         inner.add_widget(Widget())
 
-        self.big_time_label = Label(
+        big_time_spacing = max(4, int(6 * sh))
+        big_time_wrap = AnchorLayout(
+            size_hint=(1, None),
+            height=bfh,
+            anchor_x="center",
+            anchor_y="center",
+        )
+        big_time_row = BoxLayout(
+            orientation="horizontal",
+            size_hint=(None, None),
+            height=bfh,
+            spacing=big_time_spacing,
+        )
+        self._big_clock_hm = Label(
             text="--:--",
             font_size=bfs,
             bold=True,
             color=COLORS["white"],
-            size_hint=(1, None),
-            height=bfh,
-            halign="center",
+            size_hint=(None, 1),
+            halign="right",
             valign="middle",
-            markup=True,
         )
-        self.big_time_label.bind(size=self.big_time_label.setter("text_size"))
-        inner.add_widget(self.big_time_label)
+        self._big_clock_ap = Label(
+            text="",
+            font_size=self._big_ampm_font,
+            bold=True,
+            color=COLORS["white"],
+            size_hint=(None, 1),
+            halign="left",
+            valign="middle",
+        )
+
+        def _sync_big_clock_row(*_a):
+            self._big_clock_hm.width = max(int(self._big_clock_hm.texture_size[0]), 1)
+            self._big_clock_ap.width = max(int(self._big_clock_ap.texture_size[0]), 1)
+            big_time_row.width = (
+                self._big_clock_hm.width
+                + self._big_clock_ap.width
+                + big_time_row.spacing
+            )
+
+        self._big_clock_hm.bind(texture_size=_sync_big_clock_row)
+        self._big_clock_ap.bind(texture_size=_sync_big_clock_row)
+        big_time_row.add_widget(self._big_clock_hm)
+        big_time_row.add_widget(self._big_clock_ap)
+        big_time_wrap.add_widget(big_time_row)
+        inner.add_widget(big_time_wrap)
 
         self.date_label = Label(
             text="",
@@ -481,8 +549,10 @@ class HomeScreen(BaseScreen):
         now = display_now()
         hm = now.strftime("%I:%M")
         ap = now.strftime("%p")
-        self.top_time_label.text = f"{hm} [size={self._top_ampm_font}]{ap}[/size]"
-        self.big_time_label.text = f"{hm} [size={self._big_ampm_font}]{ap}[/size]"
+        self._top_clock_hm.text = hm
+        self._top_clock_ap.text = ap
+        self._big_clock_hm.text = hm
+        self._big_clock_ap.text = ap
         self.date_label.text = f"{now.strftime('%A, %B')} {now.day}"
 
     def _load_system_status(self):

@@ -391,20 +391,68 @@ class RecordingScreen(BaseScreen):
         ov_content.add_widget(Widget())
 
         paused_title_fs = self.suf(52)
+        paused_title_h = self.suv(70)
         self._paused_ampm_font = max(12, int(paused_title_fs * 0.40))
-        self.paused_title = Label(
-            text="Paused at --:--",
+        paused_title_wrap = AnchorLayout(
+            size_hint=(1, None),
+            height=paused_title_h,
+            anchor_x="center",
+            anchor_y="center",
+        )
+        paused_row = BoxLayout(
+            orientation="horizontal",
+            size_hint=(None, None),
+            height=paused_title_h,
+            spacing=self.suh(4),
+        )
+        self._paused_prefix = Label(
+            text="Paused at ",
             font_size=paused_title_fs,
             bold=True,
             color=COLORS["white"],
-            halign="center",
+            size_hint=(None, 1),
+            halign="left",
             valign="middle",
-            size_hint=(1, None),
-            height=self.suv(70),
-            markup=True,
         )
-        self.paused_title.bind(size=self.paused_title.setter("text_size"))
-        ov_content.add_widget(self.paused_title)
+        self._paused_hm = Label(
+            text="--:--",
+            font_size=paused_title_fs,
+            bold=True,
+            color=COLORS["white"],
+            size_hint=(None, 1),
+            halign="left",
+            valign="middle",
+        )
+        self._paused_ap = Label(
+            text="",
+            font_size=self._paused_ampm_font,
+            bold=True,
+            color=COLORS["white"],
+            size_hint=(None, 1),
+            halign="left",
+            valign="middle",
+        )
+
+        def _sync_paused_row(*_a):
+            self._paused_prefix.width = max(int(self._paused_prefix.texture_size[0]), 1)
+            self._paused_hm.width = max(int(self._paused_hm.texture_size[0]), 1)
+            self._paused_ap.width = max(int(self._paused_ap.texture_size[0]), 1)
+            nsp = 2 * paused_row.spacing
+            paused_row.width = (
+                self._paused_prefix.width
+                + self._paused_hm.width
+                + self._paused_ap.width
+                + nsp
+            )
+
+        self._paused_prefix.bind(texture_size=_sync_paused_row)
+        self._paused_hm.bind(texture_size=_sync_paused_row)
+        self._paused_ap.bind(texture_size=_sync_paused_row)
+        paused_row.add_widget(self._paused_prefix)
+        paused_row.add_widget(self._paused_hm)
+        paused_row.add_widget(self._paused_ap)
+        paused_title_wrap.add_widget(paused_row)
+        ov_content.add_widget(paused_title_wrap)
 
         self.paused_duration = Label(
             text="Meeting duration: 00:00",
@@ -617,11 +665,8 @@ class RecordingScreen(BaseScreen):
         self.waveform.set_levels([2] * _Waveform.NUM_BARS)
 
         now = display_now()
-        hm = now.strftime("%I:%M")
-        ap = now.strftime("%p")
-        self.paused_title.text = (
-            f"Paused at {hm} [size={self._paused_ampm_font}]{ap}[/size]"
-        )
+        self._paused_hm.text = now.strftime("%I:%M")
+        self._paused_ap.text = now.strftime("%p")
         self.paused_duration.text = f"Meeting duration: {self._fmt_time(self.elapsed_seconds)}"
         self.ov_room_label.text = getattr(self.app, "device_name", "MeetingBox")
 
