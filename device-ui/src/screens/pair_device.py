@@ -38,7 +38,7 @@ SCREEN_BG = (0.043, 0.051, 0.067, 1)
 def _field_label(text: str) -> Label:
     lb = Label(
         text=text,
-        font_size=self.suf(FONT_SIZES["small"]),
+        font_size=BaseScreen.suf(FONT_SIZES["small"]),
         bold=True,
         color=COLORS["white"],
         halign="left",
@@ -55,7 +55,7 @@ def _text_input(**kwargs) -> TextInput:
         multiline=False,
         size_hint=(1, None),
         height=48,
-        font_size=self.suf(FONT_SIZES["medium"]),
+        font_size=BaseScreen.suf(FONT_SIZES["medium"]),
         padding=[14, 12],
         background_normal="",
         background_active="",
@@ -89,7 +89,7 @@ def _make_qr_image_widget(url: str, px: int = 116):
             pass
     return Label(
         text="[QR]",
-        font_size=self.suf(FONT_SIZES["small"]),
+        font_size=BaseScreen.suf(FONT_SIZES["small"]),
         color=COLORS["gray_500"],
         size_hint=(None, None),
         size=(px, px),

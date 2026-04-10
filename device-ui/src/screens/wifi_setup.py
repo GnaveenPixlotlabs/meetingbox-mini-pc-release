@@ -105,7 +105,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
 
         icon = Label(
             text=icon_txt,
-            font_size=self.suf(FONT_SIZES['medium']),
+            font_size=BaseScreen.suf(FONT_SIZES['medium']),
             color=icon_color,
             size_hint=(None, 1),
             width=36,
@@ -116,7 +116,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
         mid = BoxLayout(orientation='vertical', spacing=2, size_hint=(1, 1))
         title = Label(
             text=ssid,
-            font_size=self.suf(FONT_SIZES['medium']),
+            font_size=BaseScreen.suf(FONT_SIZES['medium']),
             bold=True,
             color=COLORS['white'],
             halign='left',
@@ -135,7 +135,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
             sub_color = COLORS['gray_500']
         sub_l = Label(
             text=sub,
-            font_size=self.suf(FONT_SIZES['small']),
+            font_size=BaseScreen.suf(FONT_SIZES['small']),
             color=sub_color,
             halign='left',
             size_hint=(1, None),
@@ -152,7 +152,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
                 right_txt = '🔒'
             right = Label(
                 text=right_txt,
-                font_size=self.suf(FONT_SIZES['small']),
+                font_size=BaseScreen.suf(FONT_SIZES['small']),
                 color=COLORS['gray_400'],
                 size_hint=(None, 1),
                 width=28,
