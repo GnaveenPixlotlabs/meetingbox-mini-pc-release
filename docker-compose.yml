@@ -93,8 +93,8 @@ services:
       - AUDIO_INPUT_DEVICE_NAME=${AUDIO_INPUT_DEVICE_NAME:-}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      # Host user's X11 cookie (same UID in container as graphical login user, usually 1000)
-      - ${XAUTHORITY_HOST:-${HOME}/.Xauthority}:/home/uiuser/.Xauthority:ro
+      # X11 cookie: boot script sets MEETINGBOX_X11_COOKIE (not in .env) so it wins over XAUTHORITY_HOST.
+      - ${MEETINGBOX_X11_COOKIE:-${XAUTHORITY_HOST:-${HOME}/.Xauthority}}:/home/uiuser/.Xauthority:ro
       - ./data/config:/data/config
     devices:
       - /dev/dri:/dev/dri

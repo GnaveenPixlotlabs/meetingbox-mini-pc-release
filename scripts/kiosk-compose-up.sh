@@ -37,10 +37,20 @@ wait_for_x_socket() {
 
 pick_cookie_source() {
   local gdm="/run/user/${u_id}/gdm/Xauthority"
+  local rt="${XDG_RUNTIME_DIR:-/run/user/${u_id}}"
+  local f
+  # GDM (Xorg)
   if [[ -f "$gdm" && -s "$gdm" ]]; then
     echo "$gdm"
     return 0
   fi
+  # GNOME on Wayland: mutter leaves Xwayland cookies here
+  for f in "${rt}"/.mutter-Xwaylandauth.*; do
+    if [[ -f "$f" && -s "$f" ]]; then
+      echo "$f"
+      return 0
+    fi
+  done
   if [[ -f "$HOME/.Xauthority" && -s "$HOME/.Xauthority" ]]; then
     echo "$HOME/.Xauthority"
     return 0
@@ -79,8 +89,15 @@ fi
 cp "$src" "$XAUTH_COPY"
 chmod 600 "$XAUTH_COPY"
 
+echo "kiosk-compose-up: cookie source=$src size=$(wc -c <"$XAUTH_COPY") bytes -> $XAUTH_COPY"
+if command -v xauth >/dev/null 2>&1; then
+  xauth -f "$XAUTH_COPY" list 2>/dev/null | head -5 >&2 || true
+fi
+
 cd "$APPLIANCE_DIR"
-# Shell env overrides .env for this run — bind mount + DISPLAY match what we waited for.
-export XAUTHORITY_HOST="$XAUTH_COPY"
+# MEETINGBOX_X11_COOKIE is NOT in .env — Compose always uses this file for the bind mount on boot.
+export MEETINGBOX_X11_COOKIE="$XAUTH_COPY"
 export DEVICE_UI_DISPLAY="$disp_num"
-exec /usr/bin/docker compose up -d
+# Start stack, then force UI recreate so the X11 bind mount picks up the refreshed cookie.
+/usr/bin/docker compose up -d
+/usr/bin/docker compose up -d --force-recreate device-ui
