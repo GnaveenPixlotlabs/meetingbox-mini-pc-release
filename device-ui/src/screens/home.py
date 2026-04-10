@@ -41,6 +41,9 @@ def _home_center_column_width() -> int:
     # Ultrawide (e.g. 3520×1080): ~56% width, up to 2200px — reduces huge side gutters.
     return min(2200, max(720, int(DISPLAY_WIDTH * 0.56)))
 
+# Applied after display-based sv/sh (1.0 = prior sizing). 0.7 ≈ 30% smaller overall on home.
+_HOME_CONTENT_SCALE = 0.7
+
 # Calendar action titles often include "… - April 4th …" while we also format start on line 2.
 _DATEISH_TAIL_RE = re.compile(
     r"(?i)(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|"
@@ -185,6 +188,9 @@ class HomeScreen(BaseScreen):
         sv = min(_home_vertical_scale(), 2.25)
         sh = _home_horizontal_scale()
         col_w = _home_center_column_width()
+        sv *= _HOME_CONTENT_SCALE
+        sh *= _HOME_CONTENT_SCALE
+        col_w = max(360, int(col_w * _HOME_CONTENT_SCALE))
         chip_sz = max(_CHIP_SIZE, int(_CHIP_SIZE * sv))
         icon_in = max(_ICON_SIZE, int(_ICON_SIZE * sv))
         top_h = max(50, int(62 * sv))
