@@ -69,7 +69,9 @@ sudo bash scripts/install-boot-service.sh  # optional: pass install dir as first
 sudo systemctl start meetingbox-appliance
 ```
 
-The unit enables `meetingbox-appliance.service` on **`graphical.target`**, sets `HOME` for Compose, runs `xhost +local:docker`, then `docker compose up -d`. Configure the distro for **automatic login** to the desktop on the built-in screen so X `:0` and `~/.Xauthority` exist before or as the stack starts.
+The unit enables `meetingbox-appliance.service` on **`graphical.target`**, sets `HOME`, then runs **`scripts/kiosk-compose-up.sh`**: it waits for `/tmp/.X11-unix`, copies the live cookie from **`/run/user/<uid>/gdm/Xauthority`** (Ubuntu/GDM) or **`~/.Xauthority`** into **`.meetingbox-docker.xauth`**, runs **`xhost +local:docker`**, and starts Compose with **`XAUTHORITY_HOST`** pointing at that file (so boot no longer races an empty home cookie).
+
+Configure **automatic login** so GDM creates that session at boot; otherwise log in once on the panel after each reboot before the wait window (about two minutes) expires.
 
 For a “single app” feel, hide or disable the host desktop panel/taskbar in your distro settings (MeetingBox still runs fullscreen in its own window).
 

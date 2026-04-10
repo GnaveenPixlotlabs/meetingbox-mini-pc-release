@@ -57,13 +57,10 @@ User=$RUN_AS_USER
 Group=$RUN_AS_USER
 WorkingDirectory=$APPLIANCE_DIR
 Environment=HOME=$RUN_AS_HOME
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=$RUN_AS_HOME/.Xauthority
-# Helps X11 accept the UI container (ignored if it fails)
-ExecStartPre=-/usr/bin/xhost +local:docker
-ExecStart=/usr/bin/docker compose up -d
+# Do not set DISPLAY/XAUTHORITY here — kiosk-compose-up.sh waits for GDM and picks the live cookie.
+ExecStart=$APPLIANCE_DIR/scripts/kiosk-compose-up.sh $APPLIANCE_DIR
 ExecStop=/usr/bin/docker compose down
-TimeoutStartSec=180
+TimeoutStartSec=300
 
 [Install]
 WantedBy=graphical.target
