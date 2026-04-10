@@ -40,13 +40,35 @@ if ! id -nG "$RUN_AS_USER" | tr ' ' '\n' | grep -qx docker; then
 fi
 
 SERVICE_PATH=/etc/systemd/system/meetingbox-appliance.service
+AUDIO_SERVICE=/etc/systemd/system/meetingbox-docker-audio.service
 
-# Escape for systemd (basic: no newlines in path expected)
+# Redis + mic: start at multi-user.target so they run even if GDM/kiosk/X never comes up.
+cat >"$AUDIO_SERVICE" <<EOF
+[Unit]
+Description=MeetingBox Redis + audio (Docker, no display required)
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=$RUN_AS_USER
+Group=$RUN_AS_USER
+WorkingDirectory=$APPLIANCE_DIR
+Environment=HOME=$RUN_AS_HOME
+ExecStart=/usr/bin/docker compose --profile docker-audio up -d redis audio
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Full stack after graphical session (cookie + device-ui).
 cat >"$SERVICE_PATH" <<EOF
 [Unit]
-Description=MeetingBox appliance (Docker Compose)
+Description=MeetingBox appliance (Docker Compose + UI)
 Documentation=https://github.com/ (see mini-pc/README.md)
-After=docker.service network-online.target display-manager.service
+After=docker.service network-online.target display-manager.service meetingbox-docker-audio.service
 Wants=docker.service network-online.target
 After=graphical.target
 
@@ -57,7 +79,6 @@ User=$RUN_AS_USER
 Group=$RUN_AS_USER
 WorkingDirectory=$APPLIANCE_DIR
 Environment=HOME=$RUN_AS_HOME
-# Do not set DISPLAY/XAUTHORITY here — kiosk-compose-up.sh waits for GDM and picks the live cookie.
 ExecStart=$APPLIANCE_DIR/scripts/kiosk-compose-up.sh $APPLIANCE_DIR
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=300
@@ -67,8 +88,9 @@ WantedBy=graphical.target
 EOF
 
 systemctl daemon-reload
-systemctl enable meetingbox-appliance.service
-echo "Installed and enabled: $SERVICE_PATH"
-echo "  WorkingDirectory=$APPLIANCE_DIR  User=$RUN_AS_USER"
-echo "Start now:  sudo systemctl start meetingbox-appliance"
-echo "Logs:       journalctl -u meetingbox-appliance -f"
+systemctl enable meetingbox-docker-audio.service meetingbox-appliance.service
+echo "Installed and enabled:"
+echo "  $AUDIO_SERVICE  (multi-user — redis + audio always)"
+echo "  $SERVICE_PATH   (graphical — full stack + UI)"
+echo "Start now:  sudo systemctl start meetingbox-docker-audio meetingbox-appliance"
+echo "Logs:       journalctl -u meetingbox-docker-audio -u meetingbox-appliance -b"
