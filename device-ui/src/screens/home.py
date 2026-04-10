@@ -29,16 +29,17 @@ def _home_vertical_scale() -> float:
 
 
 def _home_horizontal_scale() -> float:
-    """Scale from design width 1024px (capped so buttons do not span entire ultrawide)."""
-    return min(max(DISPLAY_WIDTH / 1024.0, 0.85), 2.0)
+    """Scale from design width 1024px (capped so typography/badges stay bounded on very wide 8K+)."""
+    return min(max(DISPLAY_WIDTH / 1024.0, 0.85), 3.2)
 
 
 def _home_center_column_width() -> int:
-    """Ultrawide: capped centered column; ≤1440px wide panels: use almost full width."""
+    """Wide panels: use most of the width (still centered); small panels: nearly full width."""
     side = SPACING["screen_padding"] * 4
     if DISPLAY_WIDTH <= 1440:
         return max(360, DISPLAY_WIDTH - side)
-    return min(1200, max(560, int(DISPLAY_WIDTH * 0.34)))
+    # Ultrawide (e.g. 3520×1080): ~56% width, up to 2200px — reduces huge side gutters.
+    return min(2200, max(720, int(DISPLAY_WIDTH * 0.56)))
 
 # Calendar action titles often include "… - April 4th …" while we also format start on line 2.
 _DATEISH_TAIL_RE = re.compile(
@@ -133,6 +134,7 @@ class _RoundTextChip(ButtonBehavior, FloatLayout):
     """Circular chip with a text symbol (matches Wi‑Fi / mic chrome)."""
 
     def __init__(self, symbol: str, **kwargs):
+        sym_fs = int(kwargs.pop("symbol_font_size", FONT_SIZES["title"]))
         kwargs.setdefault("size_hint", (None, None))
         kwargs.setdefault("size", (_CHIP_SIZE, _CHIP_SIZE))
         super().__init__(**kwargs)
@@ -142,7 +144,7 @@ class _RoundTextChip(ButtonBehavior, FloatLayout):
         self.bind(pos=self._sync_bg, size=self._sync_bg)
         self._lbl = Label(
             text=symbol,
-            font_size=FONT_SIZES["title"],
+            font_size=sym_fs,
             color=COLORS["white"],
             halign="center",
             valign="middle",
@@ -179,34 +181,36 @@ class HomeScreen(BaseScreen):
         self._build_ui()
 
     def _build_ui(self):
-        # Layout scales from 1024×600 design; ultrawide gets a centered column + larger type/controls.
-        sv = _home_vertical_scale()
+        # Layout scales from 1024×600; sv/sh follow display size (soft caps only for extreme DPI).
+        sv = min(_home_vertical_scale(), 2.25)
         sh = _home_horizontal_scale()
         col_w = _home_center_column_width()
-        chip_sz = max(_CHIP_SIZE, int(_CHIP_SIZE * min(sv, 1.38)))
-        icon_in = max(_ICON_SIZE, int(_ICON_SIZE * min(sv, 1.38)))
-        top_h = max(50, int(62 * min(sv, 1.25)))
-        top_pad_v = max(8, int(12 * min(sv, 1.15)))
-        room_icon_px = max(22, int(26 * min(sv, 1.25)))
-        icon_holder_w = max(32, int(38 * min(sv, 1.15)))
-        room_fs = int(FONT_SIZES["medium"] * min(sv, 1.25))
-        ttw = max(72, int(86 * min(sv, 1.15)))
-        tth = max(28, int(34 * min(sv, 1.15)))
-        tfs = int(FONT_SIZES["body"] * min(sv, 1.15))
-        tr = max(10, int(14 * min(sv, 1.1)))
+        chip_sz = max(_CHIP_SIZE, int(_CHIP_SIZE * sv))
+        icon_in = max(_ICON_SIZE, int(_ICON_SIZE * sv))
+        top_h = max(50, int(62 * sv))
+        top_pad_v = max(8, int(12 * sv))
+        room_icon_px = max(22, int(26 * sv))
+        icon_holder_w = max(32, int(38 * sv))
+        room_fs = int(FONT_SIZES["medium"] * sv)
+        ttw = max(72, int(86 * sv))
+        tth = max(28, int(34 * sv))
+        tfs = int(FONT_SIZES["body"] * sv)
+        tr = max(10, int(14 * sv))
         bfs = int(104 * sv)
         bfh = max(96, int(124 * sv))
-        dfs = int(FONT_SIZES["body"] * min(sv, 1.35))
+        dfs = int(FONT_SIZES["body"] * sv)
         dfh = max(22, int(26 * sv))
-        ufs = int(FONT_SIZES["medium"] * min(sv, 1.3))
+        ufs = int(FONT_SIZES["medium"] * sv)
         ufh = max(44, int(52 * sv))
         stats_spacing = max(6, int(8 * sv))
         stats_col_h = max(58, int(66 * sv))
-        btn_w = min(720, int(440 * min(sh, 1.85)))
+        # Button nearly full column width on ultrawide; scale with width ratio.
+        btn_w = min(max(400, col_w - 96), int(440 * sh))
         btn_h = max(56, int(70 * sv))
         btn_row_h = max(72, int(88 * sv))
         btn_pad_b = max(14, int(22 * sv))
-        start_fs = int(FONT_SIZES["large"] * min(sv, 1.25))
+        start_fs = int(FONT_SIZES["large"] * sv)
+        sym_fs = int(FONT_SIZES["title"] * sv)
 
         root = BoxLayout(orientation="vertical")
         with root.canvas.before:
@@ -289,13 +293,17 @@ class HomeScreen(BaseScreen):
                 gear_path, size=(chip_sz, chip_sz), icon_inner=icon_in
             )
         else:
-            self.settings_btn = _RoundTextChip("⚙")
+            self.settings_btn = _RoundTextChip(
+                "⚙",
+                size=(chip_sz, chip_sz),
+                symbol_font_size=sym_fs,
+            )
         self.settings_btn.bind(on_press=lambda *_: self.goto("settings", transition="slide_left"))
         right.add_widget(self.settings_btn)
         top.add_widget(right)
         root.add_widget(top)
 
-        root.add_widget(Widget(size_hint=(1, None), height=max(12, int(18 * min(sv, 1.1)))))
+        root.add_widget(Widget(size_hint=(1, None), height=max(12, int(18 * sv))))
 
         mid_row = BoxLayout(orientation="horizontal", size_hint=(1, 1))
         mid_row.add_widget(Widget(size_hint=(1, 1)))
@@ -340,7 +348,7 @@ class HomeScreen(BaseScreen):
         )
         self.upcoming_label.bind(size=self.upcoming_label.setter("text_size"))
         inner.add_widget(self.upcoming_label)
-        inner.add_widget(Widget(size_hint=(1, None), height=max(2, int(4 * min(sv, 1.1)))))
+        inner.add_widget(Widget(size_hint=(1, None), height=max(2, int(4 * sv))))
 
         stats_col = BoxLayout(
             orientation="vertical",
@@ -352,8 +360,8 @@ class HomeScreen(BaseScreen):
 
         def _stat_row(dot_color, initial_text, attr_prefix):
             row_h = max(24, int(28 * sv))
-            badge_w = min(520, int(280 * min(sh, 1.75)))
-            small_fs = int(FONT_SIZES["small"] * min(sv, 1.2))
+            badge_w = min(max(280, col_w - 160), int(280 * sh))
+            small_fs = int(FONT_SIZES["small"] * sv)
             row = BoxLayout(
                 orientation="horizontal",
                 size_hint=(1, None),
@@ -386,7 +394,7 @@ class HomeScreen(BaseScreen):
                     color=dot_color,
                     font_size=small_fs,
                     size_hint=(None, 1),
-                    width=max(8, int(10 * min(sv, 1.1))),
+                    width=max(8, int(10 * sv)),
                 )
             )
             lbl = Label(
@@ -443,7 +451,7 @@ class HomeScreen(BaseScreen):
         mid_row.add_widget(Widget(size_hint=(1, 1)))
         root.add_widget(mid_row)
 
-        root.add_widget(Widget(size_hint=(1, None), height=max(8, int(10 * sv))))
+        root.add_widget(Widget(size_hint=(1, None), height=max(8, int(10 * min(sv, 1.35)))))
         root.add_widget(self.build_footer())
 
         self.add_widget(root)
