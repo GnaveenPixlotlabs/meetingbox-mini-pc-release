@@ -25,8 +25,11 @@ from kivy.uix.widget import Widget
 from config import (
     ASSETS_DIR,
     COLORS,
+    DISPLAY_WIDTH,
     FONT_SIZES,
+    OTHER_CONTENT_SCALE,
     SPACING,
+    home_center_column_width,
     other_screen_horizontal_scale,
     other_screen_vertical_scale,
 )
@@ -66,11 +69,13 @@ class _Waveform(Widget):
         self.BAR_WIDTH = _rw_suh(4)
         self.BAR_SPACING = _rw_suh(4)
         self.MAX_H = _rw_suv(100)
-        kwargs.setdefault("size_hint", (None, None))
-        kwargs.setdefault(
-            "size",
-            (self.NUM_BARS * (self.BAR_WIDTH + self.BAR_SPACING), self.MAX_H * 2),
+        # Bars share (NUM_BARS - 1) gaps; width must match _draw extent or layout looks off-center.
+        bar_extent_w = (
+            self.NUM_BARS * self.BAR_WIDTH
+            + (self.NUM_BARS - 1) * self.BAR_SPACING
         )
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (bar_extent_w, self.MAX_H * 2))
         super().__init__(**kwargs)
         self._levels = [2] * self.NUM_BARS
         self._active = False
@@ -92,8 +97,11 @@ class _Waveform(Widget):
 
     def _draw(self, *_args):
         self.canvas.clear()
-        total_w = self.NUM_BARS * (self.BAR_WIDTH + self.BAR_SPACING)
-        start_x = self.x + (self.width - total_w) / 2
+        extent_w = (
+            self.NUM_BARS * self.BAR_WIDTH
+            + (self.NUM_BARS - 1) * self.BAR_SPACING
+        )
+        start_x = self.x + (self.width - extent_w) / 2
         mid_y = self.center_y
 
         with self.canvas:
@@ -140,7 +148,18 @@ class RecordingScreen(BaseScreen):
             size=lambda w, _: setattr(self._bg, "size", w.size),
         )
 
-        content = BoxLayout(orientation="vertical", size_hint=(1, 1))
+        # Same idea as home: AnchorLayout + fixed column width avoids horizontal BoxLayout
+        # spacer drift on ultrawide / some Kivy layout paths.
+        col_w = max(
+            360,
+            min(DISPLAY_WIDTH, int(home_center_column_width() * OTHER_CONTENT_SCALE)),
+        )
+        mid_anchor = AnchorLayout(
+            size_hint=(1, 1),
+            anchor_x="center",
+            anchor_y="top",
+        )
+        content = BoxLayout(orientation="vertical", size_hint=(None, 1), width=col_w)
 
         # --- top: badge row + centered timer (below, full width) ---
         top_block = BoxLayout(orientation="vertical", size_hint=(1, None), height=self.suv(128))
@@ -276,7 +295,8 @@ class RecordingScreen(BaseScreen):
 
         content.add_widget(Widget(size_hint=(1, None), height=self.suv(12)))
 
-        self.root_layout.add_widget(content)
+        mid_anchor.add_widget(content)
+        self.root_layout.add_widget(mid_anchor)
 
         # === PAUSED OVERLAY (hidden initially) ===
         self.paused_overlay = FloatLayout(size_hint=(1, 1), opacity=0)
