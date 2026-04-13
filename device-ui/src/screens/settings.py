@@ -461,19 +461,18 @@ class SettingsScreen(BaseScreen):
         self.add_widget(dialog)
 
     def _do_restart(self):
-        """Try backend reboot first (host helper/nsenter), then local systemctl/sudo."""
+        """Local reboot first (nsenter helper in Docker, systemctl on bare metal); API as fallback."""
 
         async def _restart():
+            local_ok = request_system_reboot()
             api_ok = False
-            try:
-                resp = await self.backend.update_settings({'action': 'restart'})
-                api_ok = bool(resp.get('host_reboot_initiated'))
-            except Exception as e:
-                logger.debug('restart API: %s', e)
-            local_ok = False
-            if not api_ok:
-                local_ok = request_system_reboot()
-            if not api_ok and not local_ok:
+            if not local_ok:
+                try:
+                    resp = await self.backend.update_settings({'action': 'restart'})
+                    api_ok = bool(resp.get('host_reboot_initiated'))
+                except Exception as e:
+                    logger.warning('restart API fallback failed: %s', e)
+            if not local_ok and not api_ok:
                 Clock.schedule_once(lambda *_: self._show_power_error('restart'), 0)
 
         fut = run_async(_restart())
@@ -516,16 +515,15 @@ class SettingsScreen(BaseScreen):
 
     def _do_poweroff(self):
         async def _off():
+            local_ok = request_system_poweroff()
             api_ok = False
-            try:
-                resp = await self.backend.update_settings({'action': 'poweroff'})
-                api_ok = bool(resp.get('host_poweroff_initiated'))
-            except Exception as e:
-                logger.debug('poweroff API: %s', e)
-            local_ok = False
-            if not api_ok:
-                local_ok = request_system_poweroff()
-            if not api_ok and not local_ok:
+            if not local_ok:
+                try:
+                    resp = await self.backend.update_settings({'action': 'poweroff'})
+                    api_ok = bool(resp.get('host_poweroff_initiated'))
+                except Exception as e:
+                    logger.warning('poweroff API fallback failed: %s', e)
+            if not local_ok and not api_ok:
                 Clock.schedule_once(lambda *_: self._show_power_error('poweroff'), 0)
 
         fut = run_async(_off())

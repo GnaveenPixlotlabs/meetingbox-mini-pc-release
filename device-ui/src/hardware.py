@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -149,12 +150,19 @@ def _running_in_container() -> bool:
 
 
 def _run_host_helper_script(path: str) -> bool:
-    """Run a shell script on the host (e.g. nsenter wrapper mounted from the host)."""
+    """Run a shell script that reboots/shuts down the host (nsenter wrapper)."""
     p = Path(path)
     if not p.is_file():
         return False
     try:
-        subprocess.Popen(["/bin/sh", str(p)], close_fds=True, start_new_session=True)
+        proc = subprocess.Popen(
+            ["/bin/sh", str(p)], close_fds=True, start_new_session=True
+        )
+        time.sleep(0.2)
+        code = proc.poll()
+        if code is not None and code != 0:
+            logger.warning("Host helper %s exited immediately with code %s", path, code)
+            return False
         logger.info("Host helper started: %s", path)
         return True
     except Exception as e:

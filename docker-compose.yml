@@ -107,6 +107,9 @@ services:
       # X11 cookie: boot script sets MEETINGBOX_X11_COOKIE (not in .env) so it wins over XAUTHORITY_HOST.
       - ${MEETINGBOX_X11_COOKIE:-${XAUTHORITY_HOST:-${HOME}/.Xauthority}}:/home/uiuser/.Xauthority:ro
       - ./data/config:/data/config
+      # Host reboot/poweroff from Settings (nsenter PID 1 — needs cap_add below).
+      - ./scripts/meetingbox-host-reboot:/usr/local/bin/meetingbox-host-reboot:ro
+      - ./scripts/meetingbox-host-poweroff:/usr/local/bin/meetingbox-host-poweroff:ro
     devices:
       - /dev/dri:/dev/dri
       - /dev/snd:/dev/snd
@@ -118,6 +121,9 @@ services:
       - video
       - audio
       - input
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
     networks:
       - appliance-net
 

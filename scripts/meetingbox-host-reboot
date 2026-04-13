@@ -1,0 +1,12 @@
+#!/bin/sh
+# Run on the appliance host from inside the device-ui container: enter PID 1
+# namespaces so systemctl/reboot target the real machine (not the container).
+# Requires Docker cap_add: SYS_ADMIN (and usually SYS_PTRACE), or --privileged.
+
+set -e
+if ! command -v nsenter >/dev/null 2>&1; then
+  echo "meetingbox-host-reboot: nsenter not found (install util-linux in the image)" >&2
+  exit 1
+fi
+exec nsenter -t 1 -m -u -i -n -p -- /bin/sh -c \
+  '/usr/bin/systemctl reboot 2>/dev/null || /bin/systemctl reboot 2>/dev/null || /sbin/reboot -f'

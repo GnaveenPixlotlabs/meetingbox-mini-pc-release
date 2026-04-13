@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xclip \
     xauth \
     x11-xserver-utils \
+    util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

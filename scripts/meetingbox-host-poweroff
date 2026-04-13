@@ -1,0 +1,10 @@
+#!/bin/sh
+# Same as meetingbox-host-reboot but for poweroff / halt.
+
+set -e
+if ! command -v nsenter >/dev/null 2>&1; then
+  echo "meetingbox-host-poweroff: nsenter not found (install util-linux in the image)" >&2
+  exit 1
+fi
+exec nsenter -t 1 -m -u -i -n -p -- /bin/sh -c \
+  '/usr/bin/systemctl poweroff 2>/dev/null || /bin/systemctl poweroff 2>/dev/null || /sbin/poweroff -f'
