@@ -208,6 +208,57 @@ _PAIRING_UNPAIR_DEFER_SCREENS = frozenset({
 })
 
 
+def _recording_start_transient_network(exc: BaseException) -> bool:
+    """True when a short wait and retry may succeed (e.g. after Wi‑Fi handover)."""
+    if isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.ConnectTimeout,
+            httpx.ReadTimeout,
+            httpx.WriteTimeout,
+            httpx.PoolTimeout,
+        ),
+    ):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in (502, 503, 504)
+    return False
+
+
+def _recording_start_error_screen_args(exc: BaseException) -> tuple[str, str]:
+    """(title, message) for show_error_screen after start_recording failure."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code == 401:
+            return (
+                "Sign-in required",
+                "This device could not authorize with the server. Pair the device again "
+                "or check BACKEND_URL.",
+            )
+        if code >= 500:
+            return (
+                "Server error",
+                f"The backend returned HTTP {code}. Confirm the API is running and "
+                "reachable from this network.",
+            )
+        body = (exc.response.text or "").strip()
+        snippet = body[:240] + ("…" if len(body) > 240 else "")
+        return ("Recording failed", snippet or f"Server returned HTTP {code}.")
+    if _recording_start_transient_network(exc):
+        return (
+            "Cannot reach server",
+            "Could not connect to the MeetingBox backend. After switching networks (for "
+            "example unplugging Ethernet and using Wi‑Fi), wait a few seconds, confirm this "
+            "device can reach the server URL, then tap TRY AGAIN. If it keeps failing, check "
+            "BACKEND_URL in the appliance configuration.",
+        )
+    msg = (str(exc) or "Unknown error").strip()
+    if len(msg) > 400:
+        msg = msg[:397] + "…"
+    return ("Recording failed", msg)
+
+
 def _xauthority_has_display_zero(cookie_text: str) -> bool:
     """True if xauth list output likely includes authority for local display :0."""
     low = cookie_text.lower()
@@ -974,21 +1025,48 @@ class MeetingBoxApp(App):
 
     def start_recording(self):
         async def _start():
-            try:
-                result = await self.backend.start_recording()
-                self.current_session_id = result['session_id']
-                self.recording_state.update(active=True, paused=False, elapsed=0)
-                Clock.schedule_once(
-                    lambda _: self.goto_screen('recording', 'fade'), 0)
-            except Exception as e:
-                logger.error(f"Failed to start recording: {e}")
-                Clock.schedule_once(
-                    lambda _: self.show_error_screen(
-                        'Recording Failed',
-                        'Microphone error detected. The microphone may be '
-                        'disconnected or in use by another application.',
-                        recovery_text='TRY AGAIN',
-                        recovery_action=self.start_recording), 0)
+            last_exc: BaseException | None = None
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                if attempt > 0:
+                    delay = 2.0 * attempt
+                    logger.info(
+                        "Retrying start_recording after %.1fs (attempt %s/%s)",
+                        delay,
+                        attempt + 1,
+                        max_attempts,
+                    )
+                    await asyncio.sleep(delay)
+                try:
+                    result = await self.backend.start_recording()
+                    self.current_session_id = result['session_id']
+                    self.recording_state.update(active=True, paused=False, elapsed=0)
+                    Clock.schedule_once(
+                        lambda _: self.goto_screen('recording', 'fade'), 0)
+                    return
+                except Exception as e:
+                    last_exc = e
+                    logger.error(
+                        "Failed to start recording (attempt %s/%s): %s",
+                        attempt + 1,
+                        max_attempts,
+                        e,
+                    )
+                    if (
+                        attempt < max_attempts - 1
+                        and _recording_start_transient_network(e)
+                    ):
+                        continue
+                    break
+            title, message = _recording_start_error_screen_args(
+                last_exc or RuntimeError("Unknown error")
+            )
+            Clock.schedule_once(
+                lambda _: self.show_error_screen(
+                    title,
+                    message,
+                    recovery_text='TRY AGAIN',
+                    recovery_action=self.start_recording), 0)
         run_async(_start())
 
     def stop_recording(self):
