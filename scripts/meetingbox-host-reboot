@@ -1,12 +1,16 @@
 #!/bin/sh
-# Run on the appliance host from inside the device-ui container: enter PID 1
-# namespaces so systemctl/reboot target the real machine (not the container).
-# Requires Docker cap_add: SYS_ADMIN (and usually SYS_PTRACE), or --privileged.
+# Reboot the mini-PC from inside device-ui.
+#
+# Requires docker-compose ``pid: host`` so PID 1 here is the host's systemd (not the
+# container's init). Also needs ``privileged: true`` (or equivalent caps) so setns works.
+#
+# Fallback: set MEETINGBOX_LOCAL_REBOOT_CMD in .env to a host script.
 
 set -e
 if ! command -v nsenter >/dev/null 2>&1; then
   echo "meetingbox-host-reboot: nsenter not found (install util-linux in the image)" >&2
   exit 1
 fi
+
 exec nsenter -t 1 -m -u -i -n -p -- /bin/sh -c \
   '/usr/bin/systemctl reboot 2>/dev/null || /bin/systemctl reboot 2>/dev/null || /sbin/reboot -f'

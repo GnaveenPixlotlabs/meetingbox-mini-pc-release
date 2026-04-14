@@ -70,6 +70,10 @@ services:
     user: "1000:1000"
     restart: unless-stopped
     profiles: ["mini-pc", "screen"]
+    # Share host PID namespace so ``nsenter -t 1`` in meetingbox-host-reboot targets
+    # the real systemd (PID 1 on the mini-PC). Without this, -t 1 is the container's
+    # init and setns often fails with "reassociate to namespaces failed: Operation not permitted".
+    pid: host
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
