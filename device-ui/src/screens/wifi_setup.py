@@ -10,6 +10,7 @@ Design ref: UI_Ref_for_cursor/Wifi_Setup_screen/WIFI_Setup_screen.png
 """
 
 import logging
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -31,6 +32,7 @@ from kivy.uix.widget import Widget
 from screens.base_screen import BaseScreen
 from components.button import PrimaryButton, SecondaryButton
 from components.modal_dialog import ModalDialog
+from components.toggle_switch import ToggleSwitch
 from config import COLORS, FONT_SIZES, ASSETS_DIR, BORDER_RADIUS
 from async_helper import run_async
 
@@ -86,29 +88,21 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
         )
         self.bind(pos=self._update_sep, size=self._update_sep)
 
-        # Signal / status icon (left)
+        # Left: signal % (ASCII only — no missing-glyph icons)
+        sig = int(net.get('signal_strength') or 0)
         if busy:
-            icon_txt = '⟳'
-            icon_color = COLORS['blue']
-        elif connected:
-            icon_txt = '◉'
+            icon_txt = '...'
             icon_color = COLORS['blue']
         else:
-            sig = int(net.get('signal_strength') or 0)
-            if sig >= 70:
-                icon_txt = '▂▄▆'
-            elif sig >= 40:
-                icon_txt = '▂▄'
-            else:
-                icon_txt = '▂'
-            icon_color = COLORS['gray_500']
+            icon_txt = f'{sig}%'
+            icon_color = COLORS['green'] if connected else COLORS['gray_500']
 
         icon = Label(
             text=icon_txt,
-            font_size=BaseScreen.suf(FONT_SIZES['medium']),
+            font_size=BaseScreen.suf(FONT_SIZES['small']),
             color=icon_color,
             size_hint=(None, 1),
-            width=36,
+            width=44,
             halign='center',
         )
         self.add_widget(icon)
@@ -145,19 +139,7 @@ class _WiFiRow(ButtonBehavior, BoxLayout):
         mid.add_widget(sub_l)
         self.add_widget(mid)
 
-        if not busy:
-            if _is_open_network(sec):
-                right_txt = '○'
-            else:
-                right_txt = '🔒'
-            right = Label(
-                text=right_txt,
-                font_size=BaseScreen.suf(FONT_SIZES['small']),
-                color=COLORS['gray_400'],
-                size_hint=(None, 1),
-                width=28,
-            )
-            self.add_widget(right)
+        self.add_widget(Widget(size_hint=(None, 1), width=8))
 
     def _update_sep(self, *_args):
         inset = 0.5
@@ -240,7 +222,33 @@ class WiFiSetupScreen(BaseScreen):
         sub.bind(size=sub.setter('text_size'))
         root.add_widget(sub)
 
-        root.add_widget(Widget(size_hint=(1, None), height=10))
+        radio_row = BoxLayout(
+            orientation='horizontal',
+            size_hint=(1, None),
+            height=40,
+            spacing=12,
+        )
+        wl = Label(
+            text='Wi-Fi radio',
+            font_size=self.suf(FONT_SIZES['medium']),
+            color=COLORS['white'],
+            halign='left',
+            valign='middle',
+            size_hint=(1, 1),
+        )
+        wl.bind(size=wl.setter('text_size'))
+        radio_row.add_widget(wl)
+        self._wifi_radio_toggle = ToggleSwitch(
+            active=True,
+            on_toggle=self._on_wifi_radio_toggled,
+            size_hint=(None, None),
+            size=(self.suh(52), self.suv(30)),
+            pos_hint={'center_y': 0.5},
+        )
+        radio_row.add_widget(self._wifi_radio_toggle)
+        root.add_widget(radio_row)
+
+        root.add_widget(Widget(size_hint=(1, None), height=8))
 
         # List card
         card = BoxLayout(orientation='vertical', size_hint=(1, 1), spacing=0)
@@ -262,29 +270,33 @@ class WiFiSetupScreen(BaseScreen):
         actions = BoxLayout(
             orientation='horizontal',
             size_hint=(1, None),
-            height=40,
-            padding=[8, 4],
-            spacing=16,
+            height=32,
+            padding=[8, 2],
+            spacing=20,
         )
         add_link = _AddNetworkLink(
-            text='+ Add Network Manually',
+            text='Add network',
             font_size=self.suf(FONT_SIZES['small']),
             color=COLORS['blue'],
             halign='left',
             valign='middle',
-            size_hint=(0.55, 1),
+            size_hint=(0.62, 1),
         )
         add_link.bind(size=add_link.setter('text_size'))
         add_link.bind(on_press=lambda *_: self._show_manual_dialog())
         actions.add_widget(add_link)
 
-        rescan = SecondaryButton(
-            text='↻  Rescan',
-            size_hint=(0.45, 1),
+        scan_link = _AddNetworkLink(
+            text='Scan',
             font_size=self.suf(FONT_SIZES['small']),
+            color=COLORS['blue'],
+            halign='left',
+            valign='middle',
+            size_hint=(0.38, 1),
         )
-        rescan.bind(on_press=lambda *_: self._load_networks(rescan=True))
-        actions.add_widget(rescan)
+        scan_link.bind(size=scan_link.setter('text_size'))
+        scan_link.bind(on_press=lambda *_: self._load_networks(rescan=True))
+        actions.add_widget(scan_link)
         card.add_widget(actions)
 
         root.add_widget(card)
@@ -316,7 +328,38 @@ class WiFiSetupScreen(BaseScreen):
         self._ready_for_next = False
         self._connected_ssid = ''
         self._sync_next_button()
+        self._sync_wifi_radio_toggle()
         self._load_networks(rescan=True)
+
+    def _sync_wifi_radio_toggle(self):
+        en = wifi_nmcli_local.get_wifi_radio_enabled()
+        if en is not None:
+            self._wifi_radio_toggle.active = bool(en)
+
+    def _on_wifi_radio_toggled(self, active: bool):
+        def work():
+            result = wifi_nmcli_local.set_wifi_radio(active)
+            Clock.schedule_once(
+                lambda *_: self._after_wifi_radio_set(result, active), 0)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _after_wifi_radio_set(self, result: dict, requested_on: bool):
+        if not result.get('ok'):
+            msg = (result.get('message') or 'Could not change Wi-Fi.').strip()
+            self._wifi_radio_toggle.active = not requested_on
+            self.add_widget(ModalDialog(
+                title='Wi-Fi',
+                message=msg[:280],
+                confirm_text='OK',
+                cancel_text='',
+            ))
+            return
+        if requested_on:
+            self._load_networks(rescan=True)
+        else:
+            self.networks = []
+            self._populate_list()
 
     def on_leave(self):
         self._connecting_ssid = None

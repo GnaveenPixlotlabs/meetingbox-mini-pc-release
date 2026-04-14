@@ -11,6 +11,7 @@ Supports three modes:
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
+from kivy.uix.widget import Widget
 from kivy.graphics import Color, RoundedRectangle
 from config import (
     BORDER_RADIUS,
@@ -108,15 +109,9 @@ class SettingsItem(ButtonBehavior, BoxLayout):
 
         self.add_widget(text_box)
 
-        # Right widget
+        # Right widget (no Unicode chevron — many embedded fonts render it as tofu)
         if mode == 'arrow':
-            arrow = Label(
-                text='→',
-                font_size=_si_suf(FONT_SIZES['large']),
-                color=COLORS['gray_500'],
-                size_hint=(0.15, 1),
-            )
-            self.add_widget(arrow)
+            self.add_widget(Widget(size_hint=(None, 1), width=_si_suh(8)))
         elif mode == 'toggle':
             self.toggle = ToggleSwitch(
                 active=active,
@@ -128,7 +123,6 @@ class SettingsItem(ButtonBehavior, BoxLayout):
             self.add_widget(self.toggle)
         else:
             # info – no indicator
-            from kivy.uix.widget import Widget
             self.add_widget(Widget(size_hint=(0.1, 1)))
 
     # Press feedback

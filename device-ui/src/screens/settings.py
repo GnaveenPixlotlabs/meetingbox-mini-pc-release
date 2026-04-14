@@ -313,10 +313,9 @@ class SettingsScreen(BaseScreen):
                 )
 
                 wifi_ssid = info.get('wifi_ssid', 'N/A')
-                sig = info.get('wifi_signal', 0)
-                bars = '▂▄▆█'[:max(1, sig // 25)]
+                sig = int(info.get('wifi_signal', 0) or 0)
                 ip = info.get('ip_address', '?')
-                wifi_text = f'{wifi_ssid}  {bars}\nIP: {ip}'
+                wifi_text = f'{wifi_ssid}  ({sig}%)\nIP: {ip}'
 
                 su = info.get('storage_used', 0) / (1024 ** 3)
                 st = info.get('storage_total', 1) / (1024 ** 3)

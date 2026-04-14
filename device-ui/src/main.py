@@ -595,6 +595,27 @@ class MeetingBoxApp(App):
         if not USE_MOCK_BACKEND:
             self._pairing_poll = Clock.schedule_interval(
                 self._pairing_watchdog, 45.0)
+            self._metrics_push = Clock.schedule_interval(
+                self._push_appliance_metrics_tick, 30.0)
+            Clock.schedule_once(lambda _dt: self._push_appliance_metrics_tick(0), 6.0)
+        else:
+            self._metrics_push = None
+
+    def _push_appliance_metrics_tick(self, _dt):
+        if USE_MOCK_BACKEND:
+            return
+        if not get_device_auth_token().strip():
+            return
+        run_async(self._push_appliance_metrics_async())
+
+    async def _push_appliance_metrics_async(self):
+        try:
+            from appliance_metrics import collect_appliance_metrics
+
+            data = collect_appliance_metrics()
+            await self.backend.post_appliance_system_metrics(data)
+        except Exception as e:
+            logger.debug("Appliance metrics push skipped: %s", e)
 
     def _global_setup_check(self, _dt):
         """Global poll for setup_complete marker -- fires from any screen."""
@@ -619,6 +640,9 @@ class MeetingBoxApp(App):
         if getattr(self, '_pairing_poll', None):
             self._pairing_poll.cancel()
             self._pairing_poll = None
+        if getattr(self, '_metrics_push', None):
+            self._metrics_push.cancel()
+            self._metrics_push = None
         if self.ws_task and not self.ws_task.done():
             self.ws_task.cancel()
         run_async(self.backend.close())

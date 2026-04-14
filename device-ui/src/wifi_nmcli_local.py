@@ -76,6 +76,42 @@ def detect_wifi_iface() -> Optional[str]:
     return None
 
 
+def get_wifi_radio_enabled() -> Optional[bool]:
+    """
+    True if NetworkManager Wi-Fi radio is on.
+    Returns None if nmcli output could not be parsed.
+    """
+    if not has_nmcli():
+        return None
+    try:
+        r = nmcli_run(["radio", "wifi"], timeout=5)
+        line = (r.stdout or "").strip().lower()
+        if not line and r.returncode != 0:
+            return None
+        if "enabled" in line or line in ("on", "true", "yes"):
+            return True
+        if "disabled" in line or line in ("off", "false", "no"):
+            return False
+    except Exception:
+        return None
+    return None
+
+
+def set_wifi_radio(enabled: bool) -> dict:
+    """Turn the main Wi-Fi hardware/software switch on or off (nmcli)."""
+    if not has_nmcli():
+        return {"ok": False, "message": "nmcli not available"}
+    arg = "on" if enabled else "off"
+    try:
+        res = nmcli_run(["radio", "wifi", arg], timeout=15)
+        if res.returncode == 0:
+            return {"ok": True, "message": ""}
+        msg = (res.stderr or res.stdout or "").strip() or "nmcli failed"
+        return {"ok": False, "message": msg}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
 def empty_scan_hint() -> str:
     """
     Explain why the Wi-Fi list may be empty (Ethernet-only, no adapter, radio off, etc.).

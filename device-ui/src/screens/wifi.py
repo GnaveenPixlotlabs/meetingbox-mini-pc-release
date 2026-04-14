@@ -5,6 +5,7 @@ Compact network list with scan button.
 """
 
 import logging
+import threading
 from typing import Any, Dict, List, Optional
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
@@ -23,6 +24,7 @@ from components.status_bar import StatusBar
 from components.wifi_network_item import WiFiNetworkItem
 from components.button import SecondaryButton, PrimaryButton
 from components.modal_dialog import ModalDialog
+from components.toggle_switch import ToggleSwitch
 from config import (
     BORDER_RADIUS,
     COLORS,
@@ -180,6 +182,32 @@ class WiFiScreen(BaseScreen):
         status_row.add_widget(status_col)
         left.add_widget(status_row)
 
+        radio_row = BoxLayout(
+            orientation='horizontal',
+            size_hint=(1, None),
+            height=self.suv(40),
+            spacing=self.suh(10),
+        )
+        rw = Label(
+            text='Wi-Fi radio',
+            font_size=self.suf(FONT_SIZES['medium']),
+            color=COLORS['white'],
+            halign='left',
+            valign='middle',
+            size_hint=(1, 1),
+        )
+        rw.bind(size=rw.setter('text_size'))
+        radio_row.add_widget(rw)
+        self._wifi_radio_toggle = ToggleSwitch(
+            active=True,
+            on_toggle=self._on_wifi_radio_toggled,
+            size_hint=(None, None),
+            size=(self.suh(52), self.suv(30)),
+            pos_hint={'center_y': 0.5},
+        )
+        radio_row.add_widget(self._wifi_radio_toggle)
+        left.add_widget(radio_row)
+
         scroll = ScrollView(do_scroll_x=False)
         self.networks_container = GridLayout(
             cols=1, spacing=self.suv(SPACING['list_item_spacing']), size_hint_y=None)
@@ -193,20 +221,35 @@ class WiFiScreen(BaseScreen):
         right = BoxLayout(orientation='vertical', size_hint=(0.3, 1),
                           spacing=self.suv(SPACING['button_spacing']))
         from kivy.uix.widget import Widget
-        right.add_widget(Widget(size_hint=(1, 0.28)))
-        add_btn = SecondaryButton(
-            text='ADD',
-            size_hint=(1, 0.3),
+        from kivy.uix.behaviors import ButtonBehavior
+
+        class _LinkBtn(ButtonBehavior, Label):
+            pass
+
+        right.add_widget(Widget(size_hint=(1, 0.35)))
+        add_btn = _LinkBtn(
+            text='Add',
             font_size=self.suf(FONT_SIZES['small']),
+            color=COLORS['blue'],
+            halign='center',
+            valign='middle',
+            size_hint=(1, None),
+            height=self.suv(36),
         )
+        add_btn.bind(size=add_btn.setter('text_size'))
         add_btn.bind(on_press=lambda *_: self._show_manual_network_dialog())
         right.add_widget(add_btn)
-        scan_btn = SecondaryButton(
-            text='SCAN',
-            size_hint=(1, 0.3),
+        scan_btn = _LinkBtn(
+            text='Scan',
             font_size=self.suf(FONT_SIZES['small']),
+            color=COLORS['blue'],
+            halign='center',
+            valign='middle',
+            size_hint=(1, None),
+            height=self.suv(36),
         )
-        scan_btn.bind(on_press=lambda _: self._load_networks(rescan=True))
+        scan_btn.bind(size=scan_btn.setter('text_size'))
+        scan_btn.bind(on_press=lambda *_: self._load_networks(rescan=True))
         right.add_widget(scan_btn)
         content.add_widget(right)
 
@@ -218,7 +261,38 @@ class WiFiScreen(BaseScreen):
         self.add_widget(root)
 
     def on_enter(self):
+        self._sync_wifi_radio_toggle()
         self._load_networks(rescan=True)
+
+    def _sync_wifi_radio_toggle(self):
+        en = wifi_nmcli_local.get_wifi_radio_enabled()
+        if en is not None:
+            self._wifi_radio_toggle.active = bool(en)
+
+    def _on_wifi_radio_toggled(self, active: bool):
+        def work():
+            result = wifi_nmcli_local.set_wifi_radio(active)
+            Clock.schedule_once(
+                lambda *_: self._after_wifi_radio_set(result, active), 0)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _after_wifi_radio_set(self, result: dict, requested_on: bool):
+        if not result.get('ok'):
+            msg = (result.get('message') or 'Could not change Wi-Fi.').strip()
+            self._wifi_radio_toggle.active = not requested_on
+            self.add_widget(ModalDialog(
+                title='Wi-Fi',
+                message=msg[:280],
+                confirm_text='OK',
+                cancel_text='',
+            ))
+            return
+        if requested_on:
+            self._load_networks(rescan=True)
+        else:
+            self.networks = []
+            self._populate([], {})
 
     def _load_networks(self, rescan: bool = False):
         async def _load():
