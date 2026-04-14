@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xauth \
     x11-xserver-utils \
     util-linux \
+    network-manager \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

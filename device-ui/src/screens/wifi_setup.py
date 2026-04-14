@@ -10,10 +10,10 @@ Design ref: UI_Ref_for_cursor/Wifi_Setup_screen/WIFI_Setup_screen.png
 """
 
 import logging
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Optional
+
+import wifi_nmcli_local
 
 from kivy.clock import Clock
 from kivy.graphics import Color, Line, Rectangle, RoundedRectangle
@@ -333,7 +333,7 @@ class WiFiSetupScreen(BaseScreen):
     def _load_networks(self, rescan: bool = False):
         async def _load():
             try:
-                nets = self._scan_local_wifi(rescan=rescan)
+                nets = wifi_nmcli_local.scan_wifi_networks(rescan=rescan)
                 Clock.schedule_once(lambda *_: self._apply_networks(nets), 0)
             except Exception as e:
                 logger.warning('Local WiFi scan failed, trying backend: %s', e)
@@ -610,10 +610,16 @@ class WiFiSetupScreen(BaseScreen):
 
         async def _run():
             try:
-                if self._has_local_nmcli():
-                    result = self._connect_local_wifi(ssid, password=password)
-                else:
-                    result = await self.backend.connect_wifi(ssid, password=password)
+                result = {"status": "failed", "message": ""}
+                if wifi_nmcli_local.has_nmcli():
+                    result = wifi_nmcli_local.connect_wifi_network(ssid, password)
+                if result.get("status") != "connected":
+                    try:
+                        result = await self.backend.connect_wifi(
+                            ssid, password=password
+                        )
+                    except Exception:
+                        pass
                 ok = result.get('status') == 'connected'
                 msg = result.get('message', '')
 
@@ -648,147 +654,6 @@ class WiFiSetupScreen(BaseScreen):
                 Clock.schedule_once(_fail, 0)
 
         run_async(_run())
-
-    # ------------------------------------------------------------------
-    # Local WiFi control (native UI path)
-    # ------------------------------------------------------------------
-
-    def _has_local_nmcli(self) -> bool:
-        return shutil.which('nmcli') is not None
-
-    def _nmcli_run(self, args: list, timeout: float = 30):
-        """
-        Run nmcli. If NetworkManager denies the action (PolicyKit), retry with
-        `sudo -n nmcli` so a passwordless sudo rule can allow WiFi on kiosk users.
-        """
-        cmd = ['nmcli'] + args
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        combined = ((res.stderr or '') + (res.stdout or '')).lower()
-        priv = any(
-            s in combined
-            for s in (
-                'insufficient privileges',
-                'not authorized',
-                'permission denied',
-                'not allowed to',
-                'polkit',
-            )
-        )
-        if res.returncode != 0 and priv and shutil.which('sudo'):
-            res2 = subprocess.run(
-                ['sudo', '-n', 'nmcli'] + args,
-                capture_output=True, text=True, timeout=timeout,
-            )
-            sudo_msg = ((res2.stderr or '') + (res2.stdout or '')).lower()
-            # If sudo itself failed because it cannot prompt, keep original
-            # NetworkManager error so users don't confuse sudo password with WiFi password.
-            if (
-                res2.returncode != 0 and
-                any(
-                    s in sudo_msg for s in (
-                        'a password is required',
-                        'password is required',
-                        'terminal is required',
-                        'no tty present',
-                        'sudo: a password',
-                    )
-                )
-            ):
-                return res
-            return res2
-        return res
-
-    def _detect_wifi_iface(self) -> Optional[str]:
-        if not self._has_local_nmcli():
-            return None
-        try:
-            res = self._nmcli_run(
-                ['-t', '-f', 'DEVICE,TYPE,STATE', 'device', 'status'],
-                timeout=6,
-            )
-            for line in res.stdout.splitlines():
-                parts = line.split(':')
-                if len(parts) >= 3 and parts[1] == 'wifi':
-                    return parts[0]
-        except Exception:
-            return None
-        return None
-
-    def _scan_local_wifi(self, rescan: bool = False) -> list[dict]:
-        if not self._has_local_nmcli():
-            raise RuntimeError('nmcli not available')
-        if rescan:
-            try:
-                self._nmcli_run(['device', 'wifi', 'rescan'], timeout=10)
-            except Exception:
-                pass
-
-        res = self._nmcli_run(
-            ['-m', 'multiline', '-f', 'SSID,SIGNAL,SECURITY,IN-USE',
-             'device', 'wifi', 'list'],
-            timeout=15,
-        )
-        nets: list[dict] = []
-        cur: dict[str, str] = {}
-
-        def flush_current():
-            ssid = (cur.get('SSID') or '').strip()
-            if not ssid:
-                return
-            signal_raw = (cur.get('SIGNAL') or '0').strip()
-            sec_raw = (cur.get('SECURITY') or '').strip()
-            in_use = (cur.get('IN-USE') or '').strip()
-            try:
-                signal = int(signal_raw) if signal_raw else 0
-            except ValueError:
-                signal = 0
-            nets.append({
-                'ssid': ssid,
-                'signal_strength': signal,
-                'security': sec_raw or 'open',
-                'connected': in_use == '*',
-            })
-
-        for line in res.stdout.splitlines():
-            if ':' not in line:
-                continue
-            k, v = line.split(':', 1)
-            key = k.strip()
-            val = v.strip()
-
-            # nmcli multiline output is not always separated by blank lines.
-            # If a key repeats for the next AP, flush the current record first.
-            if key == 'SSID' and 'SSID' in cur:
-                flush_current()
-                cur = {}
-
-            cur[key] = val
-
-        flush_current()
-        return nets
-
-    def _connect_local_wifi(self, ssid: str, password: Optional[str]) -> dict:
-        iface = self._detect_wifi_iface()
-        args = ['device', 'wifi', 'connect', ssid]
-        if password:
-            args += ['password', password]
-        if iface:
-            args += ['ifname', iface]
-        res = self._nmcli_run(args, timeout=30)
-        if res.returncode == 0:
-            return {'status': 'connected', 'message': f'Connected to {ssid}'}
-        msg = (res.stderr or '').strip() or (res.stdout or '').strip() or 'Connection failed'
-        ml = msg.lower()
-        if 'password' not in ml and '802' not in ml:
-            if any(
-                s in ml
-                for s in ('sudo', 'privileges', 'not authorized', 'polkit')
-            ):
-                msg += (
-                    '\n\nWiFi needs NetworkManager permission on this device. '
-                    'See scripts/sudoers.meetingbox-nmcli.example or scripts/polkit/'
-                )
-        return {'status': 'failed', 'message': msg}
 
     def _on_back(self, _inst):
         self.go_back()

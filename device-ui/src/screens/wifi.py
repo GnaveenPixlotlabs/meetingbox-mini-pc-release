@@ -15,6 +15,7 @@ from kivy.uix.widget import Widget
 from kivy.graphics import Color, RoundedRectangle
 from kivy.clock import Clock
 from async_helper import run_async
+import wifi_nmcli_local
 
 from screens.base_screen import BaseScreen
 from components.status_bar import StatusBar
@@ -193,7 +194,7 @@ class WiFiScreen(BaseScreen):
         from kivy.uix.widget import Widget
         right.add_widget(Widget(size_hint=(1, 0.6)))
         scan_btn = SecondaryButton(text='SCAN', size_hint=(1, 0.35))
-        scan_btn.bind(on_press=lambda _: self._load_networks())
+        scan_btn.bind(on_press=lambda _: self._load_networks(rescan=True))
         right.add_widget(scan_btn)
         content.add_widget(right)
 
@@ -205,19 +206,26 @@ class WiFiScreen(BaseScreen):
         self.add_widget(root)
 
     def on_enter(self):
-        self._load_networks()
+        self._load_networks(rescan=True)
 
-    def _load_networks(self):
+    def _load_networks(self, rescan: bool = False):
         async def _load():
             nets: list = []
             info: dict = {}
             try:
-                raw = await self.backend.get_wifi_networks()
-                if isinstance(raw, list):
-                    nets = raw
+                if wifi_nmcli_local.has_nmcli():
+                    nets = wifi_nmcli_local.scan_wifi_networks(rescan=rescan)
             except Exception as e:
-                logger.warning("WiFi scan failed: %s", e)
+                logger.warning("Local WiFi scan failed, trying backend: %s", e)
                 nets = []
+            if not nets:
+                try:
+                    raw = await self.backend.get_wifi_networks()
+                    if isinstance(raw, list):
+                        nets = raw
+                except Exception as e:
+                    logger.warning("WiFi scan (backend) failed: %s", e)
+                    nets = []
             for n in nets:
                 if not isinstance(n, dict):
                     continue
@@ -375,10 +383,39 @@ class WiFiScreen(BaseScreen):
 
     def _connect_to_network(self, ssid, password=None):
         async def _connect():
+            result: dict = {"status": "failed", "message": ""}
             try:
-                result = await self.backend.connect_wifi(ssid, password=password)
-                if result.get('status') == 'connected':
-                    Clock.schedule_once(lambda _: self._load_networks(), 0)
-            except Exception:
-                pass
+                if wifi_nmcli_local.has_nmcli():
+                    result = wifi_nmcli_local.connect_wifi_network(ssid, password)
+                if result.get("status") != "connected":
+                    try:
+                        result = await self.backend.connect_wifi(
+                            ssid, password=password
+                        )
+                    except Exception as be:
+                        logger.warning("WiFi connect (backend): %s", be)
+                        result = {"status": "failed", "message": str(be)[:200]}
+            except Exception as e:
+                logger.warning("WiFi connect: %s", e)
+                result = {"status": "failed", "message": str(e)[:200]}
+
+            def _done(_dt):
+                if result.get("status") == "connected":
+                    self._load_networks(rescan=False)
+                else:
+                    msg = (result.get("message") or "").strip() or (
+                        "Could not connect. Check the password and NetworkManager "
+                        "permissions on this device."
+                    )
+                    self.add_widget(
+                        ModalDialog(
+                            title="Could not connect",
+                            message=msg[:400],
+                            confirm_text="OK",
+                            cancel_text="",
+                        )
+                    )
+
+            Clock.schedule_once(_done, 0)
+
         run_async(_connect())

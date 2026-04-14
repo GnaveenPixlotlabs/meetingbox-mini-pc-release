@@ -110,6 +110,8 @@ services:
       # Host reboot/poweroff from Settings (nsenter PID 1 — needs cap_add below).
       - ./scripts/meetingbox-host-reboot:/usr/local/bin/meetingbox-host-reboot:ro
       - ./scripts/meetingbox-host-poweroff:/usr/local/bin/meetingbox-host-poweroff:ro
+      # nmcli in the container talks to the host NetworkManager (WiFi from Home / Settings).
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     devices:
       - /dev/dri:/dev/dri
       - /dev/snd:/dev/snd
