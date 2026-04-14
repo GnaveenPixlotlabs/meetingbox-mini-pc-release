@@ -7,31 +7,56 @@ FROM python:3.11-slim
 #   libegl1-mesa-dev was removed in Debian Bookworm — EGL is now vendor-neutral.
 #   libmtdev1 was renamed to libmtdev1t64 in Bookworm's time_t transition.
 #   GStreamer dev libs and libinput-dev are not required for the SDL2 window backend.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsdl2-dev \
-    libsdl2-image-dev \
-    libsdl2-mixer-dev \
-    libsdl2-ttf-dev \
-    libgl1-mesa-dev \
-    libgles2-mesa-dev \
-    libx11-dev \
-    libxext-dev \
-    libxrender-dev \
-    libxcursor-dev \
-    libxfixes-dev \
-    libxi-dev \
-    libxrandr-dev \
-    libmtdev1t64 \
-    libportaudio2 \
-    build-essential \
-    pkg-config \
-    xdg-utils \
-    xclip \
-    xauth \
-    x11-xserver-utils \
-    util-linux \
-    network-manager \
-    && rm -rf /var/lib/apt/lists/*
+#
+# Apt: Hash Sum mismatch on .deb files is often mirror/CDN or HTTP pipelining; we clear lists,
+# disable pipelining, retry fetches, and re-run update+install up to 3 times.
+RUN set -eux; \
+    export DEBIAN_FRONTEND=noninteractive; \
+    apt_install() { \
+        apt-get install -y --no-install-recommends \
+            -o Acquire::Retries=5 \
+            -o Acquire::http::Pipeline-Depth=0 \
+            "$@"; \
+    }; \
+    success=0; \
+    for attempt in 1 2 3; do \
+        rm -rf /var/lib/apt/lists/*; \
+        if apt-get update \
+            -o Acquire::Retries=5 \
+            -o Acquire::http::Pipeline-Depth=0 \
+        && apt_install \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            libsdl2-mixer-dev \
+            libsdl2-ttf-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrender-dev \
+            libxcursor-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxrandr-dev \
+            libmtdev1t64 \
+            libportaudio2 \
+            build-essential \
+            pkg-config \
+            xdg-utils \
+            xclip \
+            xauth \
+            x11-xserver-utils \
+            util-linux \
+            network-manager \
+        ; then \
+            success=1; \
+            break; \
+        fi; \
+        echo "apt attempt ${attempt} failed (e.g. Hash Sum mismatch); retrying in 8s..." >&2; \
+        sleep 8; \
+    done; \
+    test "$success" -eq 1; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
