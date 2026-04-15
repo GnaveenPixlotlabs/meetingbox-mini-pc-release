@@ -988,12 +988,21 @@ class MeetingBoxApp(App):
         """Handle summary_complete event from AI service (if it fires separately)."""
         meeting_id = data.get('meeting_id')
         summary = data.get('summary', {})
-        if meeting_id and self.screen_manager.current == 'processing':
-            def _show(_dt):
-                screen = self.screen_manager.get_screen('summary_review')
-                screen.set_meeting_data(meeting_id, summary)
-                self.goto_screen('summary_review', 'fade')
-            Clock.schedule_once(_show, 0)
+        if meeting_id:
+            Clock.schedule_once(
+                lambda _dt: self._show_processing_summary_ready(meeting_id, summary),
+                0,
+            )
+
+    def _show_processing_summary_ready(self, meeting_id: str, summary: dict):
+        """Keep user on processing screen and enable CTA once summary is ready."""
+        try:
+            processing = self.screen_manager.get_screen('processing')
+        except Exception as e:
+            logger.debug("Processing screen unavailable for summary-ready update: %s", e)
+            return
+        if hasattr(processing, 'on_summary_ready'):
+            processing.on_summary_ready(meeting_id, summary or {})
 
     def _auto_summarize(self, meeting_id: str):
         """After transcription completes, auto-trigger summarization then show review screen."""
@@ -1009,12 +1018,10 @@ class MeetingBoxApp(App):
                 Clock.schedule_once(_status_actions, 0)
                 summary = await self.backend.summarize_meeting(meeting_id)
 
-                def _show(_dt):
-                    screen = self.screen_manager.get_screen('summary_review')
-                    screen.set_meeting_data(meeting_id, summary)
-                    self.goto_screen('summary_review', 'fade')
-
-                Clock.schedule_once(_show, 0)
+                Clock.schedule_once(
+                    lambda _dt: self._show_processing_summary_ready(meeting_id, summary),
+                    0,
+                )
             except Exception as e:
                 logger.error(f"Auto-summarize failed: {e}")
                 def _fallback(_dt):
