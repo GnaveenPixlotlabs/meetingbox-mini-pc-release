@@ -1,300 +1,118 @@
 """
-WiFi Settings Screen – Dark themed (480 × 320)
+WiFi from home — same Figma “Connect to WiFi” list as onboarding (wifi_setup).
 
-Compact network list with scan button.
+Status bar stays for back navigation; body is shared via wifi_figma_ui.build_figma_wifi_column.
 """
 
 import logging
-import threading
-from typing import Any, Dict, List, Optional
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.label import Label
-from kivy.uix.textinput import TextInput
-from kivy.uix.widget import Widget
-from kivy.graphics import Color, RoundedRectangle
+from typing import Optional
+
 from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.label import Label
+from kivy.uix.spinner import Spinner
+from kivy.uix.textinput import TextInput
+
 from async_helper import run_async
 import wifi_nmcli_local
 from network_util import linux_ethernet_ready
 
-from screens.base_screen import BaseScreen
-from components.status_bar import StatusBar
-from components.wifi_network_item import WiFiNetworkItem
-from components.button import SecondaryButton, PrimaryButton
+from components.button import PrimaryButton, SecondaryButton
 from components.modal_dialog import ModalDialog
-from components.toggle_switch import ToggleSwitch
-from config import (
-    BORDER_RADIUS,
-    COLORS,
-    FONT_SIZES,
-    SPACING,
-    other_screen_horizontal_scale,
-    other_screen_vertical_scale,
+from components.status_bar import StatusBar
+from config import ASSETS_DIR, BORDER_RADIUS, COLORS, FONT_SIZES
+from screens.base_screen import BaseScreen
+from screens.wifi_figma_ui import (
+    FigmaListDivider,
+    FigmaWifiNetworkRow,
+    build_figma_wifi_column,
+    is_open_wifi as _is_open,
 )
+from screens.wifi_setup import present_wifi_password_flow
 
 logger = logging.getLogger(__name__)
 
-
-def _ws_suv(px):
-    v = other_screen_vertical_scale()
-    return max(1, int(round(float(px) * v)))
-
-
-def _ws_suh(px):
-    h = other_screen_horizontal_scale()
-    return max(1, int(round(float(px) * h)))
-
-
-class _WifiSignalStrip(Widget):
-    """Four rising bars: count and color reflect signal strength (0–100) when connected."""
-
-    def __init__(self, **kwargs):
-        kwargs.setdefault("size_hint", (None, None))
-        kwargs.setdefault("size", (_ws_suh(56), _ws_suv(30)))
-        super().__init__(**kwargs)
-        self._pct = 0
-        self._connected = False
-        self.bind(pos=self._redraw, size=self._redraw)
-
-    def set_state(self, connected: bool, signal_pct: int) -> None:
-        self._connected = bool(connected)
-        self._pct = max(0, min(100, int(signal_pct)))
-        self._redraw()
-
-    def _bar_color(self):
-        if not self._connected:
-            return COLORS["gray_600"]
-        p = self._pct
-        if p >= 70:
-            return COLORS["green"]
-        if p >= 45:
-            return COLORS["yellow"]
-        if p >= 25:
-            return COLORS["yellow"]
-        return COLORS["red"]
-
-    def _lit_count(self) -> int:
-        if not self._connected:
-            return 0
-        p = self._pct
-        if p >= 80:
-            return 4
-        if p >= 55:
-            return 3
-        if p >= 30:
-            return 2
-        if p >= 10:
-            return 1
-        return 1
-
-    def _redraw(self, *_args):
-        self.canvas.clear()
-        bar_w = _ws_suh(9)
-        gap = _ws_suh(3)
-        heights = [_ws_suv(7), _ws_suv(12), _ws_suv(17), _ws_suv(22)]
-        x0 = self.x + _ws_suh(2)
-        bottom = self.y + _ws_suv(3)
-        lit = self._lit_count()
-        active_color = self._bar_color()
-        dim = COLORS["gray_800"]
-
-        with self.canvas:
-            for i in range(4):
-                h = heights[i]
-                if self._connected and i < lit:
-                    Color(*active_color)
-                else:
-                    Color(*dim)
-                RoundedRectangle(
-                    pos=(x0 + i * (bar_w + gap), bottom),
-                    size=(bar_w, h),
-                    radius=[max(1, _ws_suv(2))],
-                )
+WELCOME_DIR = ASSETS_DIR / "welcome"
+LOGO_PATH = str(WELCOME_DIR / "LOGO.png")
 
 
 class WiFiScreen(BaseScreen):
-    """WiFi settings – dark theme."""
+    """Wi‑Fi settings from home — Figma list UI aligned with WiFiSetupScreen."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.networks = []
+        self.networks: list = []
+        self._connecting_ssid: Optional[str] = None
+        self._scan_anim_event = None
+        self._scan_dots = 0
+        self._row_widgets: list = []
+        self._wifi_connected_ready = False
         self._build_ui()
 
     def _build_ui(self):
-        root = BoxLayout(orientation='vertical')
+        root = BoxLayout(orientation="vertical")
         self.make_dark_bg(root)
 
         self.status_bar = StatusBar(
-            status_text='WiFi',
-            device_name='WiFi',
+            status_text="WiFi",
+            device_name="WiFi",
             back_button=True,
             on_back=self.go_back,
             show_settings=False,
         )
         root.add_widget(self.status_bar)
 
-        content = BoxLayout(
-            orientation='horizontal',
-            padding=self.suh(SPACING['screen_padding']),
-            spacing=self.suv(SPACING['section_spacing']),
-        )
-
-        left = BoxLayout(
-            orientation='vertical',
-            size_hint=(0.7, 1),
-            spacing=self.suv(SPACING['button_spacing']),
-        )
-
-        status_row = BoxLayout(
-            orientation='horizontal',
-            size_hint=(1, None),
-            height=self.suv(48),
-            spacing=self.suh(12),
-        )
-        self.signal_strip = _WifiSignalStrip()
-        status_row.add_widget(self.signal_strip)
-        status_col = BoxLayout(orientation='vertical', spacing=self.suv(2))
-        self.status_title = Label(
-            text='Wi‑Fi status',
-            font_size=self.suf(FONT_SIZES['medium']),
-            bold=True,
-            color=COLORS['white'],
-            halign='left',
-            valign='bottom',
-            size_hint=(1, None),
-            height=self.suv(22),
-        )
-        self.status_title.bind(size=self.status_title.setter('text_size'))
-        status_col.add_widget(self.status_title)
-        self.status_detail = Label(
-            text='Loading…',
-            font_size=self.suf(FONT_SIZES['small']),
-            color=COLORS['gray_400'],
-            halign='left',
-            valign='top',
-            size_hint=(1, None),
-            height=self.suv(36),
-        )
-        self.status_detail.bind(size=self.status_detail.setter('text_size'))
-        status_col.add_widget(self.status_detail)
-        status_row.add_widget(status_col)
-        left.add_widget(status_row)
-
-        radio_row = BoxLayout(
-            orientation='horizontal',
-            size_hint=(1, None),
-            height=self.suv(40),
-            spacing=self.suh(10),
-        )
-        rw = Label(
-            text='Wi-Fi radio',
-            font_size=self.suf(FONT_SIZES['medium']),
-            color=COLORS['white'],
-            halign='left',
-            valign='middle',
-            size_hint=(1, 1),
-        )
-        rw.bind(size=rw.setter('text_size'))
-        radio_row.add_widget(rw)
-        self._wifi_radio_toggle = ToggleSwitch(
-            active=True,
-            on_toggle=self._on_wifi_radio_toggled,
-            size_hint=(None, None),
-            size=(self.suh(52), self.suv(30)),
-            pos_hint={'center_y': 0.5},
-        )
-        radio_row.add_widget(self._wifi_radio_toggle)
-        left.add_widget(radio_row)
-
-        scroll = ScrollView(do_scroll_x=False)
-        self.networks_container = GridLayout(
-            cols=1, spacing=self.suv(SPACING['list_item_spacing']), size_hint_y=None)
-        self.networks_container.bind(
-            minimum_height=self.networks_container.setter('height'))
-        scroll.add_widget(self.networks_container)
-        left.add_widget(scroll)
-
-        content.add_widget(left)
-
-        right = BoxLayout(orientation='vertical', size_hint=(0.3, 1),
-                          spacing=self.suv(SPACING['button_spacing']))
-        from kivy.uix.widget import Widget
-        from kivy.uix.behaviors import ButtonBehavior
-
-        class _LinkBtn(ButtonBehavior, Label):
-            pass
-
-        right.add_widget(Widget(size_hint=(1, 0.35)))
-        add_btn = _LinkBtn(
-            text='Add',
-            font_size=self.suf(FONT_SIZES['small']),
-            color=COLORS['blue'],
-            halign='center',
-            valign='middle',
-            size_hint=(1, None),
-            height=self.suv(36),
-        )
-        add_btn.bind(size=add_btn.setter('text_size'))
-        add_btn.bind(on_press=lambda *_: self._show_manual_network_dialog())
-        right.add_widget(add_btn)
-        scan_btn = _LinkBtn(
-            text='Scan',
-            font_size=self.suf(FONT_SIZES['small']),
-            color=COLORS['blue'],
-            halign='center',
-            valign='middle',
-            size_hint=(1, None),
-            height=self.suv(36),
-        )
-        scan_btn.bind(size=scan_btn.setter('text_size'))
-        scan_btn.bind(on_press=lambda *_: self._load_networks(rescan=True))
-        right.add_widget(scan_btn)
-        content.add_widget(right)
-
-        root.add_widget(content)
-
-        footer = self.build_footer()
-        root.add_widget(footer)
+        refs = build_figma_wifi_column(LOGO_PATH)
+        self._scan_status_lbl = refs["scan_status_lbl"]
+        self._list = refs["list_grid"]
+        self._next_btn = refs["next_btn"]
+        self._next_btn.bind(on_press=self._on_footer_next)
+        refs["back_btn"].bind(on_press=lambda *_: self.go_back())
+        refs["add_link"].bind(on_press=lambda *_: self._show_manual_network_dialog())
+        refs["rescan_btn"].bind(on_press=lambda *_: self._load_networks(rescan=True))
+        root.add_widget(refs["root"])
 
         self.add_widget(root)
+        self._sync_next_btn()
+
+    def _sync_next_btn(self):
+        self._next_btn.disabled = not self._wifi_connected_ready
+        self._next_btn.opacity = 1.0 if self._wifi_connected_ready else 0.4
+
+    def _on_footer_next(self, *_):
+        if self._wifi_connected_ready:
+            self.go_back()
 
     def on_enter(self):
-        self._sync_wifi_radio_toggle()
+        self._connecting_ssid = None
+        self._wifi_connected_ready = False
+        self._sync_next_btn()
         self._load_networks(rescan=True)
 
-    def _sync_wifi_radio_toggle(self):
-        en = wifi_nmcli_local.get_wifi_radio_enabled()
-        if en is not None:
-            self._wifi_radio_toggle.active = bool(en)
+    def on_leave(self):
+        self._connecting_ssid = None
+        self._stop_scan_anim()
+        self._cleanup_rows()
 
-    def _on_wifi_radio_toggled(self, active: bool):
-        def work():
-            result = wifi_nmcli_local.set_wifi_radio(active)
-            Clock.schedule_once(
-                lambda *_: self._after_wifi_radio_set(result, active), 0)
+    def _stop_scan_anim(self):
+        if self._scan_anim_event:
+            self._scan_anim_event.cancel()
+            self._scan_anim_event = None
 
-        threading.Thread(target=work, daemon=True).start()
+    def _start_scan_anim(self):
+        self._scan_dots = 0
+        self._scan_status_lbl.text = "Scanning."
+        self._scan_anim_event = Clock.schedule_interval(self._tick_scan_anim, 0.4)
 
-    def _after_wifi_radio_set(self, result: dict, requested_on: bool):
-        if not result.get('ok'):
-            msg = (result.get('message') or 'Could not change Wi-Fi.').strip()
-            self._wifi_radio_toggle.active = not requested_on
-            self.add_widget(ModalDialog(
-                title='Wi-Fi',
-                message=msg[:280],
-                confirm_text='OK',
-                cancel_text='',
-            ))
-            return
-        if requested_on:
-            self._load_networks(rescan=True)
-        else:
-            self.networks = []
-            self._populate([], {})
+    def _tick_scan_anim(self, *_):
+        self._scan_dots = (self._scan_dots + 1) % 4
+        self._scan_status_lbl.text = "Scanning" + "." * max(1, self._scan_dots)
 
     def _load_networks(self, rescan: bool = False):
+        self._start_scan_anim()
+
         async def _load():
             nets: list = []
             info: dict = {}
@@ -302,16 +120,14 @@ class WiFiScreen(BaseScreen):
                 if wifi_nmcli_local.has_nmcli():
                     nets = wifi_nmcli_local.scan_wifi_networks(rescan=rescan)
             except Exception as e:
-                logger.warning("Local WiFi scan failed, trying backend: %s", e)
-                nets = []
+                logger.warning("Local WiFi scan failed: %s", e)
             if not nets:
                 try:
                     raw = await self.backend.get_wifi_networks()
                     if isinstance(raw, list):
                         nets = raw
                 except Exception as e:
-                    logger.warning("WiFi scan (backend) failed: %s", e)
-                    nets = []
+                    logger.warning("WiFi scan (backend): %s", e)
             for n in nets:
                 if not isinstance(n, dict):
                     continue
@@ -324,239 +140,171 @@ class WiFiScreen(BaseScreen):
                 info = await self.backend.get_system_info()
             except Exception as e:
                 logger.debug("system info for WiFi screen: %s", e)
-                info = {}
             self.networks = nets
 
             def _apply(_dt):
-                self._populate(nets, info)
+                self._apply_networks(nets, info)
 
             Clock.schedule_once(_apply, 0)
 
         run_async(_load())
 
-    def _populate(self, networks: Optional[List[Dict[str, Any]]] = None, info: Optional[Dict[str, Any]] = None):
-        nets = networks if networks is not None else getattr(self, "networks", []) or []
-        info = info or {}
+    def _apply_networks(self, nets, info: dict):
+        self._stop_scan_anim()
+        self.networks = nets or []
         ssid = (info.get("wifi_ssid") or "").strip()
-        sig = int(info.get("wifi_signal") or 0)
-        ip = (info.get("ip_address") or "").strip()
-        connected = bool(ssid)
-
-        self.signal_strip.set_state(connected, sig if connected else 0)
-        if connected:
-            self.status_title.text = "Connected"
-            self.status_detail.text = f"{ssid}\nSignal {sig}% · IP {ip or '—'}"
-        else:
-            self.status_title.text = "Wi‑Fi"
-            if linux_ethernet_ready():
-                self.status_detail.text = (
-                    "Wired LAN is active. Tap ADD to enter SSID/password, "
-                    "or unplug Ethernet and tap SCAN for nearby networks."
-                )
-            else:
-                self.status_detail.text = (
-                    "Tap SCAN for networks or ADD to type SSID and password."
-                )
-
-        self.networks_container.clear_widgets()
-        if not nets:
-            hint_text = wifi_nmcli_local.empty_scan_hint()
-            hint = Label(
-                text=hint_text,
-                font_size=self.suf(FONT_SIZES['small']),
-                color=COLORS['gray_500'],
-                halign='left',
-                valign='top',
-                size_hint_y=None,
-                height=self.suv(160),
+        self._wifi_connected_ready = bool(ssid)
+        self._sync_next_btn()
+        if ssid:
+            self._scan_status_lbl.text = f"Connected · {ssid}"
+        elif linux_ethernet_ready():
+            self._scan_status_lbl.text = (
+                "Wired LAN active — add a network manually or scan after unplugging Ethernet."
             )
-            hint.bind(size=hint.setter('text_size'))
-            self.networks_container.add_widget(hint)
-            return
-
-        for net in nets:
-            n = dict(net) if isinstance(net, dict) else {}
-            if "signal_strength" not in n:
-                n["signal_strength"] = int(n.get("signal") or 0)
-            item = WiFiNetworkItem(network=n)
-            item.bind(on_press=self._on_network)
-            self.networks_container.add_widget(item)
-
-    def _on_network(self, instance):
-        if instance.network.get('connected'):
-            return
-        net = instance.network
-        security = (net.get('security') or '').lower()
-        if security and security != 'open' and security != '--':
-            self._show_password_dialog(net['ssid'])
         else:
-            self._connect_to_network(net['ssid'], password=None)
+            count = len([n for n in self.networks if n.get("ssid")])
+            self._scan_status_lbl.text = (
+                f"{count} network{'s' if count != 1 else ''} found"
+                if count
+                else "No networks found"
+            )
+        self._populate()
 
-    def _show_password_dialog(self, ssid):
-        from kivy.uix.floatlayout import FloatLayout
-        from kivy.graphics import Color, RoundedRectangle, Rectangle
+    def _cleanup_rows(self):
+        for w in self._row_widgets:
+            if hasattr(w, "cleanup"):
+                w.cleanup()
+        self._row_widgets.clear()
 
-        overlay = FloatLayout()
-        with overlay.canvas.before:
-            Color(*COLORS['overlay'])
-            _bg = Rectangle(pos=overlay.pos, size=overlay.size)
-        overlay.bind(
-            pos=lambda w, v: setattr(_bg, 'pos', w.pos),
-            size=lambda w, v: setattr(_bg, 'size', w.size),
-        )
+    def _populate(self):
+        self._cleanup_rows()
+        self._list.clear_widgets()
 
-        card = BoxLayout(
-            orientation='vertical',
-            size_hint=(None, None),
-            size=(self.suh(360), self.suv(220)),
-            pos_hint={'center_x': 0.5, 'center_y': 0.5},
-            padding=self.suh(16),
-            spacing=self.suv(10),
-        )
-        with card.canvas.before:
-            Color(*COLORS['surface'])
-            _cbg = RoundedRectangle(pos=card.pos, size=card.size, radius=[BORDER_RADIUS])
-        card.bind(
-            pos=lambda w, v: setattr(_cbg, 'pos', w.pos),
-            size=lambda w, v: setattr(_cbg, 'size', w.size),
-        )
+        def _key(n):
+            return (0 if n.get("connected") else 1, -(n.get("signal_strength") or 0))
 
-        title = Label(
-            text=f'Connect to {ssid}',
-            font_size=self.suf(FONT_SIZES['title']), bold=True,
-            color=COLORS['white'], halign='left',
-            size_hint=(1, None), height=self.suv(28),
-        )
-        title.bind(size=title.setter('text_size'))
-        card.add_widget(title)
+        first = True
+        for net in sorted(self.networks, key=_key):
+            if not (net.get("ssid") or "").strip():
+                continue
+            if not first:
+                self._list.add_widget(FigmaListDivider())
+            first = False
+            row = FigmaWifiNetworkRow(net, self._connecting_ssid or "", self)
+            row.bind(on_press=lambda inst, n=net: self._on_row_tap(n))
+            self._list.add_widget(row)
+            self._row_widgets.append(row)
 
-        hint = Label(
-            text='Enter WiFi password:',
-            font_size=self.suf(FONT_SIZES['small']), color=COLORS['gray_400'],
-            halign='left', size_hint=(1, None), height=self.suv(20),
-        )
-        hint.bind(size=hint.setter('text_size'))
-        card.add_widget(hint)
+        if not self._list.children:
+            hint = wifi_nmcli_local.empty_scan_hint()
+            lbl = Label(
+                text=hint,
+                font_size=self.suf(FONT_SIZES["small"]),
+                color=COLORS["gray_500"],
+                halign="left",
+                valign="top",
+                size_hint=(1, None),
+                height=self.suv(100),
+            )
+            lbl.bind(size=lbl.setter("text_size"))
+            self._list.add_widget(lbl)
 
-        pwd_input = TextInput(
-            hint_text='Password',
-            password=True,
-            multiline=False,
-            font_size=self.suf(FONT_SIZES['body']),
-            size_hint=(1, None), height=self.suv(40),
-            background_color=COLORS['background'],
-            foreground_color=COLORS['white'],
-            cursor_color=COLORS['blue'],
-        )
-        card.add_widget(pwd_input)
-
-        btn_row = BoxLayout(
-            size_hint=(1, None),
-            height=self.suv(50),
-            spacing=self.suv(SPACING['button_spacing']),
-        )
-        cancel_btn = SecondaryButton(text='CANCEL', size_hint=(0.5, 1))
-        connect_btn = PrimaryButton(text='CONNECT', size_hint=(0.5, 1))
-
-        def _dismiss(*_a):
-            if overlay.parent:
-                overlay.parent.remove_widget(overlay)
-
-        def _do_connect(*_a):
-            password = pwd_input.text.strip()
-            _dismiss()
-            self._connect_to_network(ssid, password=password or None)
-
-        cancel_btn.bind(on_press=_dismiss)
-        connect_btn.bind(on_press=_do_connect)
-        btn_row.add_widget(cancel_btn)
-        btn_row.add_widget(connect_btn)
-        card.add_widget(btn_row)
-
-        overlay.add_widget(card)
-        self.add_widget(overlay)
+    def _on_row_tap(self, net: dict):
+        if self._connecting_ssid:
+            return
+        ssid = (net.get("ssid") or "").strip()
+        if not ssid:
+            return
+        if net.get("connected"):
+            self._wifi_connected_ready = True
+            self._sync_next_btn()
+            self._populate()
+            return
+        if _is_open(net.get("security") or ""):
+            self._connect_to_network(ssid, None)
+        else:
+            present_wifi_password_flow(
+                self, ssid, lambda pw: self._connect_to_network(ssid, pw))
 
     def _show_manual_network_dialog(self):
         """Connect by SSID without scanning (works when Ethernet is plugged in)."""
-        from kivy.uix.floatlayout import FloatLayout
-        from kivy.uix.spinner import Spinner
-        from kivy.graphics import Color, Rectangle, RoundedRectangle
-
         overlay = FloatLayout()
         with overlay.canvas.before:
-            Color(*COLORS['overlay'])
+            Color(*COLORS["overlay"])
             ov = Rectangle(pos=overlay.pos, size=overlay.size)
         overlay.bind(
-            pos=lambda w, *_: setattr(ov, 'pos', w.pos),
-            size=lambda w, *_: setattr(ov, 'size', w.size),
+            pos=lambda w, *_: setattr(ov, "pos", w.pos),
+            size=lambda w, *_: setattr(ov, "size", w.size),
         )
 
         card = BoxLayout(
-            orientation='vertical',
+            orientation="vertical",
             size_hint=(None, None),
             size=(self.suh(420), self.suv(300)),
-            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
             padding=self.suh(16),
             spacing=self.suv(8),
         )
         with card.canvas.before:
-            Color(*COLORS['surface'])
+            Color(*COLORS["surface"])
             cbg = RoundedRectangle(
                 pos=card.pos, size=card.size, radius=[BORDER_RADIUS])
         card.bind(
-            pos=lambda w, *_: setattr(cbg, 'pos', w.pos),
-            size=lambda w, *_: setattr(cbg, 'size', w.size),
+            pos=lambda w, *_: setattr(cbg, "pos", w.pos),
+            size=lambda w, *_: setattr(cbg, "size", w.size),
         )
 
-        card.add_widget(Label(
-            text='Add Wi‑Fi network',
-            font_size=self.suf(FONT_SIZES['title']),
-            bold=True,
-            color=COLORS['white'],
-            halign='left',
-            size_hint=(1, None),
-            height=self.suv(26),
-        ))
+        card.add_widget(
+            Label(
+                text="Add Wi‑Fi network",
+                font_size=self.suf(FONT_SIZES["title"]),
+                bold=True,
+                color=COLORS["white"],
+                halign="left",
+                size_hint=(1, None),
+                height=self.suv(26),
+            )
+        )
 
         ssid_in = TextInput(
-            hint_text='Network name (SSID)',
+            hint_text="Network name (SSID)",
             multiline=False,
-            font_size=self.suf(FONT_SIZES['body']),
+            font_size=self.suf(FONT_SIZES["body"]),
             size_hint=(1, None),
             height=self.suv(40),
-            background_color=COLORS['surface_light'],
-            foreground_color=COLORS['white'],
-            hint_text_color=COLORS['gray_600'],
-            cursor_color=COLORS['white'],
+            background_color=COLORS["surface_light"],
+            foreground_color=COLORS["white"],
+            hint_text_color=COLORS["gray_600"],
+            cursor_color=COLORS["white"],
         )
         card.add_widget(ssid_in)
 
         spin = Spinner(
-            text='WPA2 Personal',
-            values=('Open', 'WPA2 Personal', 'WPA3 Personal'),
+            text="WPA2 Personal",
+            values=("Open", "WPA2 Personal", "WPA3 Personal"),
             size_hint=(1, None),
             height=self.suv(40),
-            background_color=COLORS['gray_800'],
-            color=COLORS['white'],
+            background_color=COLORS["gray_800"],
+            color=COLORS["white"],
         )
         card.add_widget(spin)
 
         pwd_in = TextInput(
-            hint_text='Password (if required)',
+            hint_text="Password (if required)",
             password=True,
             multiline=False,
-            font_size=self.suf(FONT_SIZES['body']),
+            font_size=self.suf(FONT_SIZES["body"]),
             size_hint=(1, None),
             height=self.suv(40),
-            background_color=COLORS['surface_light'],
-            foreground_color=COLORS['white'],
-            hint_text_color=COLORS['gray_600'],
-            cursor_color=COLORS['white'],
+            background_color=COLORS["surface_light"],
+            foreground_color=COLORS["white"],
+            hint_text_color=COLORS["gray_600"],
+            cursor_color=COLORS["white"],
         )
         card.add_widget(pwd_in)
 
         def on_sec(spinner, txt):
-            pwd_in.disabled = txt == 'Open'
+            pwd_in.disabled = txt == "Open"
             pwd_in.opacity = 0.5 if pwd_in.disabled else 1.0
 
         spin.bind(text=on_sec)
@@ -571,32 +319,35 @@ class WiFiScreen(BaseScreen):
         def do_add(*_a):
             name = ssid_in.text.strip()
             if not name:
-                self.add_widget(ModalDialog(
-                    title='SSID required',
-                    message='Enter the Wi‑Fi network name.',
-                    confirm_text='OK',
-                    cancel_text='',
-                ))
+                self.add_widget(
+                    ModalDialog(
+                        title="SSID required",
+                        message="Enter the Wi‑Fi network name.",
+                        confirm_text="OK",
+                        cancel_text="",
+                    )
+                )
                 return
             sec = spin.text
-            if sec != 'Open':
-                pw = pwd_in.text.strip()
-                if not pw:
-                    self.add_widget(ModalDialog(
-                        title='Password required',
-                        message='Enter the password or choose Open.',
-                        confirm_text='OK',
-                        cancel_text='',
-                    ))
+            if sec != "Open":
+                if not pwd_in.text.strip():
+                    self.add_widget(
+                        ModalDialog(
+                            title="Password required",
+                            message="Enter the password or choose Open.",
+                            confirm_text="OK",
+                            cancel_text="",
+                        )
+                    )
                     return
             dismiss()
-            if sec == 'Open':
+            if sec == "Open":
                 self._connect_to_network(name, None)
             else:
                 self._connect_to_network(name, pwd_in.text.strip())
 
-        cancel = SecondaryButton(text='Cancel', size_hint=(0.5, 1))
-        go = PrimaryButton(text='Connect', size_hint=(0.5, 1))
+        cancel = SecondaryButton(text="Cancel", size_hint=(0.5, 1))
+        go = PrimaryButton(text="Connect", size_hint=(0.5, 1))
         cancel.bind(on_press=dismiss)
         go.bind(on_press=do_add)
         row.add_widget(cancel)
@@ -607,7 +358,11 @@ class WiFiScreen(BaseScreen):
         self.add_widget(overlay)
 
     def _connect_to_network(self, ssid, password=None):
-        async def _connect():
+        self._connecting_ssid = ssid
+        self._scan_status_lbl.text = f"Connecting to {ssid}…"
+        self._populate()
+
+        async def _run():
             result: dict = {"status": "failed", "message": ""}
             try:
                 if wifi_nmcli_local.has_nmcli():
@@ -624,10 +379,16 @@ class WiFiScreen(BaseScreen):
                 logger.warning("WiFi connect: %s", e)
                 result = {"status": "failed", "message": str(e)[:200]}
 
-            def _done(_dt):
+            def _done(*_):
+                self._connecting_ssid = None
                 if result.get("status") == "connected":
+                    self._wifi_connected_ready = True
+                    self._sync_next_btn()
+                    self._scan_status_lbl.text = f"Connected to {ssid}"
                     self._load_networks(rescan=False)
                 else:
+                    self._scan_status_lbl.text = "Connection failed"
+                    self._populate()
                     msg = (result.get("message") or "").strip() or (
                         "Could not connect. Check the password and NetworkManager "
                         "permissions on this device."
@@ -643,4 +404,4 @@ class WiFiScreen(BaseScreen):
 
             Clock.schedule_once(_done, 0)
 
-        run_async(_connect())
+        run_async(_run())
