@@ -336,165 +336,157 @@ class RecordingScreen(BaseScreen):
             size=lambda w, _: setattr(self._ov_bg, "size", w.size),
         )
 
-        ov_content = BoxLayout(orientation="vertical", size_hint=(1, 1))
+        ov_content = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, 1),
+            padding=[self.suh(24), self.suv(24), self.suh(24), self.suv(24)],
+        )
 
-        ov_gear_col = max(self.suh(44), self.suv(36))
-        ov_top = BoxLayout(
+        top_row = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
-            height=self.suv(62),
-            padding=[0, self.suv(12), 0, 0],
+            height=self.suv(52),
         )
-        ov_top.add_widget(Widget(size_hint=(None, 1), width=ov_gear_col))
-
         self.paused_badge = Image(
             source=str(_REC_ASSETS / "PAUSED icon for top left.png"),
             size_hint=(None, None),
-            size=(self.suh(120), self.suv(32)),
+            size=(self.suh(120), self.suv(36)),
             allow_stretch=True,
             keep_ratio=True,
         )
-        paused_badge_anchor = AnchorLayout(size_hint=(1, 1), anchor_x="center", anchor_y="center")
-        paused_badge_anchor.add_widget(self.paused_badge)
-        ov_top.add_widget(paused_badge_anchor)
+        left_badge_anchor = AnchorLayout(
+            size_hint=(None, 1),
+            width=self.suh(140),
+            anchor_x="left",
+            anchor_y="center",
+        )
+        left_badge_anchor.add_widget(self.paused_badge)
+        top_row.add_widget(left_badge_anchor)
+        top_row.add_widget(Widget())
 
+        right_cluster = BoxLayout(
+            orientation="horizontal",
+            size_hint=(None, 1),
+            width=self.suh(248),
+            spacing=self.suh(16),
+        )
+        meta_col = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, 1),
+            spacing=0,
+        )
+        self.ov_room_label = Label(
+            text="MeetingBox",
+            font_size=self.suf(FONT_SIZES["tiny"]),
+            color=(148 / 255.0, 163 / 255.0, 184 / 255.0, 1),
+            halign="right",
+            valign="middle",
+            size_hint=(1, None),
+            height=self.suv(16),
+        )
+        self.ov_room_label.bind(size=self.ov_room_label.setter("text_size"))
+        meta_col.add_widget(self.ov_room_label)
+        self.ov_meeting_label = Label(
+            text="Project Sync",
+            font_size=self.suf(FONT_SIZES["small"]),
+            bold=True,
+            color=(241 / 255.0, 245 / 255.0, 249 / 255.0, 1),
+            halign="right",
+            valign="middle",
+            size_hint=(1, None),
+            height=self.suv(20),
+        )
+        self.ov_meeting_label.bind(size=self.ov_meeting_label.setter("text_size"))
+        meta_col.add_widget(self.ov_meeting_label)
+        right_cluster.add_widget(meta_col)
+
+        gear_shell = AnchorLayout(
+            size_hint=(None, None),
+            size=(self.suh(40), self.suv(40)),
+            anchor_x="center",
+            anchor_y="center",
+        )
+        with gear_shell.canvas.before:
+            Color(74 / 255.0, 143 / 255.0, 217 / 255.0, 0.20)
+            self._ov_gear_bg = RoundedRectangle(pos=gear_shell.pos, size=gear_shell.size, radius=[999])
+        gear_shell.bind(
+            pos=lambda w, *_: setattr(self._ov_gear_bg, "pos", w.pos),
+            size=lambda w, *_: setattr(self._ov_gear_bg, "size", w.size),
+        )
         self.ov_gear = _ImageButton(
             source=str(gear_path),
             size_hint=(None, None),
-            size=(self.suh(32), self.suv(32)),
+            size=(self.suh(18), self.suv(18)),
             allow_stretch=True,
             keep_ratio=True,
         )
         self.ov_gear.bind(on_press=lambda *_: self.goto("settings", transition="slide_left"))
-        ov_gear_anchor = AnchorLayout(
-            size_hint=(None, 1),
-            width=ov_gear_col,
-            anchor_x="right",
-            anchor_y="top",
-        )
-        ov_gear_anchor.add_widget(self.ov_gear)
-        ov_top.add_widget(ov_gear_anchor)
-        ov_content.add_widget(ov_top)
+        gear_shell.add_widget(self.ov_gear)
+        right_cluster.add_widget(gear_shell)
+        top_row.add_widget(right_cluster)
+        ov_content.add_widget(top_row)
 
-        self.ov_room_label = Label(
-            text="MeetingBox",
-            font_size=self.suf(FONT_SIZES["small"]),
-            color=COLORS["gray_400"],
+        main_wrap = AnchorLayout(size_hint=(1, 1), anchor_x="center", anchor_y="center")
+        main_col = BoxLayout(
+            orientation="vertical",
+            size_hint=(None, None),
+            width=min(self.suh(760), max(self.suh(520), DISPLAY_WIDTH - self.suh(64))),
+            height=self.suv(420),
+            spacing=self.suv(16),
+        )
+        self.paused_title = Label(
+            text="Paused at --:--",
+            font_size=self.suf(50),
+            bold=True,
+            color=(241 / 255.0, 245 / 255.0, 249 / 255.0, 1),
             halign="center",
             valign="middle",
             size_hint=(1, None),
-            height=self.suv(22),
+            height=self.suv(62),
         )
-        self.ov_room_label.bind(size=self.ov_room_label.setter("text_size"))
-        ov_content.add_widget(self.ov_room_label)
-
-        ov_content.add_widget(Widget())
-
-        paused_title_fs = self.suf(52)
-        paused_title_h = self.suv(70)
-        self._paused_ampm_font = max(12, int(paused_title_fs * 0.40))
-        paused_title_wrap = AnchorLayout(
-            size_hint=(1, None),
-            height=paused_title_h,
-            anchor_x="center",
-            anchor_y="center",
-        )
-        paused_row = BoxLayout(
-            orientation="horizontal",
-            size_hint=(None, None),
-            height=paused_title_h,
-            spacing=self.suh(4),
-        )
-        self._paused_prefix = Label(
-            text="Paused at ",
-            font_size=paused_title_fs,
-            bold=True,
-            color=COLORS["white"],
-            size_hint=(None, 1),
-            halign="left",
-            valign="middle",
-        )
-        self._paused_hm = Label(
-            text="--:--",
-            font_size=paused_title_fs,
-            bold=True,
-            color=COLORS["white"],
-            size_hint=(None, 1),
-            halign="left",
-            valign="middle",
-        )
-        self._paused_ap = Label(
-            text="",
-            font_size=self._paused_ampm_font,
-            bold=True,
-            color=COLORS["white"],
-            size_hint=(None, 1),
-            halign="left",
-            valign="middle",
-        )
-
-        def _sync_paused_row(*_a):
-            self._paused_prefix.width = max(int(self._paused_prefix.texture_size[0]), 1)
-            self._paused_hm.width = max(int(self._paused_hm.texture_size[0]), 1)
-            self._paused_ap.width = max(int(self._paused_ap.texture_size[0]), 1)
-            nsp = 2 * paused_row.spacing
-            paused_row.width = (
-                self._paused_prefix.width
-                + self._paused_hm.width
-                + self._paused_ap.width
-                + nsp
-            )
-
-        self._paused_prefix.bind(texture_size=_sync_paused_row)
-        self._paused_hm.bind(texture_size=_sync_paused_row)
-        self._paused_ap.bind(texture_size=_sync_paused_row)
-        paused_row.add_widget(self._paused_prefix)
-        paused_row.add_widget(self._paused_hm)
-        paused_row.add_widget(self._paused_ap)
-        paused_title_wrap.add_widget(paused_row)
-        ov_content.add_widget(paused_title_wrap)
+        self.paused_title.bind(size=self.paused_title.setter("text_size"))
+        main_col.add_widget(self.paused_title)
 
         self.paused_duration = Label(
             text="Meeting duration: 00:00",
-            font_size=self.suf(FONT_SIZES["body"]),
-            color=COLORS["gray_400"],
+            font_size=self.suf(18),
+            color=(148 / 255.0, 163 / 255.0, 184 / 255.0, 1),
             halign="center",
+            valign="middle",
             size_hint=(1, None),
-            height=self.suv(26),
+            height=self.suv(30),
         )
         self.paused_duration.bind(size=self.paused_duration.setter("text_size"))
-        ov_content.add_widget(self.paused_duration)
-
-        ov_content.add_widget(Widget(size_hint=(1, None), height=self.suv(16)))
+        main_col.add_widget(self.paused_duration)
+        main_col.add_widget(Widget(size_hint=(1, None), height=self.suv(24)))
 
         line_wrap = BoxLayout(
             size_hint=(1, None),
-            height=self.suv(2),
-            padding=[self.suh(SPACING["screen_padding"] * 2), 0],
+            height=self.suv(8),
+            padding=[self.suh(72), 0, self.suh(72), 0],
         )
-        line_w = Widget(size_hint=(1, 1))
+        line_w = Widget(size_hint=(1, None), height=self.suv(4))
         with line_w.canvas:
-            Color(0.30, 0.56, 0.98, 0.6)
-            self._pause_line = Rectangle(pos=line_w.pos, size=line_w.size)
+            Color(74 / 255.0, 143 / 255.0, 217 / 255.0, 1)
+            self._pause_line = RoundedRectangle(pos=line_w.pos, size=line_w.size, radius=[999])
         line_w.bind(
-            pos=lambda w, _: setattr(self._pause_line, "pos", w.pos),
-            size=lambda w, _: setattr(self._pause_line, "size", w.size),
+            pos=lambda w, *_: setattr(self._pause_line, "pos", w.pos),
+            size=lambda w, *_: setattr(self._pause_line, "size", w.size),
         )
         line_wrap.add_widget(line_w)
-        ov_content.add_widget(line_wrap)
+        main_col.add_widget(line_wrap)
+        main_col.add_widget(Widget(size_hint=(1, None), height=self.suv(32)))
 
-        ov_content.add_widget(Widget(size_hint=(1, None), height=self.suv(20)))
-
-        mic_wrap = BoxLayout(orientation="vertical", size_hint=(1, None), height=self.suv(80))
+        mic_wrap = BoxLayout(orientation="vertical", size_hint=(1, None), height=self.suv(112))
         mic_icon_wrap = AnchorLayout(
             size_hint=(1, None),
-            height=self.suv(46),
+            height=self.suv(64),
             anchor_x="center",
             anchor_y="center",
         )
-        mic_circle = FloatLayout(size_hint=(None, None), size=(self.suv(42), self.suv(42)))
+        mic_circle = FloatLayout(size_hint=(None, None), size=(self.suv(64), self.suv(64)))
         with mic_circle.canvas.before:
-            Color(*COLORS["gray_700"])
+            Color(30 / 255.0, 41 / 255.0, 59 / 255.0, 1)
             self._mic_bg = Ellipse(pos=mic_circle.pos, size=mic_circle.size)
         mic_circle.bind(
             pos=lambda w, _: setattr(self._mic_bg, "pos", w.pos),
@@ -503,7 +495,7 @@ class RecordingScreen(BaseScreen):
         mic_icon = Image(
             source=str(_REC_ASSETS / "mic mute icon.png"),
             size_hint=(None, None),
-            size=(self.suv(20), self.suv(20)),
+            size=(self.suv(26), self.suv(26)),
             allow_stretch=True,
             keep_ratio=True,
         )
@@ -517,17 +509,30 @@ class RecordingScreen(BaseScreen):
 
         mic_label = Label(
             text="Microphone is off",
-            font_size=self.suf(FONT_SIZES["small"]),
-            color=COLORS["gray_500"],
+            font_size=self.suf(FONT_SIZES["body"]),
+            color=(148 / 255.0, 163 / 255.0, 184 / 255.0, 1),
             halign="center",
+            valign="middle",
             size_hint=(1, None),
-            height=self.suv(22),
+            height=self.suv(30),
         )
         mic_label.bind(size=mic_label.setter("text_size"))
         mic_wrap.add_widget(mic_label)
-        ov_content.add_widget(mic_wrap)
+        main_col.add_widget(mic_wrap)
+        main_wrap.add_widget(main_col)
+        ov_content.add_widget(main_wrap)
 
-        ov_content.add_widget(Widget())
+        footer = BoxLayout(orientation="vertical", size_hint=(1, None), height=self.suv(116))
+        divider = Widget(size_hint=(1, None), height=1)
+        with divider.canvas:
+            Color(30 / 255.0, 41 / 255.0, 59 / 255.0, 1)
+            self._ov_footer_divider = Rectangle(pos=divider.pos, size=divider.size)
+        divider.bind(
+            pos=lambda w, *_: setattr(self._ov_footer_divider, "pos", w.pos),
+            size=lambda w, *_: setattr(self._ov_footer_divider, "size", w.size),
+        )
+        footer.add_widget(divider)
+        footer.add_widget(Widget(size_hint=(1, None), height=self.suv(28)))
 
         resume_path = _REC_ASSETS / "resume recording button.png"
         self.resume_btn = _ImageButton(
@@ -549,26 +554,17 @@ class RecordingScreen(BaseScreen):
         )
         self.end_paused_btn.bind(on_press=self._on_stop)
 
-        paused_inner = BoxLayout(
+        footer_btns = BoxLayout(
             orientation="horizontal",
-            size_hint=(None, None),
-            height=self.suv(58),
-            spacing=self.suh(24),
-            width=self.suh(292) + self.suh(252) + self.suh(24),
-        )
-        paused_inner.add_widget(self.resume_btn)
-        paused_inner.add_widget(self.end_paused_btn)
-
-        ov_btn_row = AnchorLayout(
             size_hint=(1, None),
-            height=self.suv(76),
-            anchor_x="center",
-            anchor_y="top",
-            padding=[0, 0, 0, self.suv(18)],
+            height=self.suv(58),
+            padding=[0, 0, 0, 0],
         )
-        ov_btn_row.add_widget(paused_inner)
-        ov_content.add_widget(ov_btn_row)
-        ov_content.add_widget(Widget(size_hint=(1, None), height=self.suv(12)))
+        footer_btns.add_widget(self.resume_btn)
+        footer_btns.add_widget(Widget())
+        footer_btns.add_widget(self.end_paused_btn)
+        footer.add_widget(footer_btns)
+        ov_content.add_widget(footer)
 
         self.paused_overlay.add_widget(ov_content)
 
@@ -665,8 +661,7 @@ class RecordingScreen(BaseScreen):
         self.waveform.set_levels([2] * _Waveform.NUM_BARS)
 
         now = display_now()
-        self._paused_hm.text = now.strftime("%I:%M")
-        self._paused_ap.text = now.strftime("%p")
+        self.paused_title.text = f"Paused at {now.strftime('%H:%M')}"
         self.paused_duration.text = f"Meeting duration: {self._fmt_time(self.elapsed_seconds)}"
         self.ov_room_label.text = getattr(self.app, "device_name", "MeetingBox")
 
