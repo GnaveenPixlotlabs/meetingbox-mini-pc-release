@@ -1,22 +1,14 @@
 """
-WiFi Setup Screen – full rework for 7-inch touch display (1024 × 600).
+WiFi Setup Screen – 1024 × 600 layout aligned with Figma “Connect to WiFi”.
 
-Design principles
-─────────────────
-• All tap targets ≥ 52 px tall for finger accuracy.
-• Signal bars drawn with canvas (no missing-glyph Unicode characters).
-• Password dialog is placed in the upper portion of the screen so the
-  software keyboard (bottom ~40 %) never covers the input field.
-  When a TextInput gains focus, the card also slides further up by
-  binding to Window.on_keyboard_height.
-• Show / Hide password toggle lets the user verify what they typed.
-• Animated scanning dots while the radio is working.
-• Wi-Fi radio toggle at the top; turning it on triggers an auto-scan.
+• Dark background #0B0E14, list in a rounded panel with blue outline accent.
+• Header: MeetingBox AI + title “Connect to WiFi” + required subtitle.
+• Network rows: signal / connecting (blue Wi‑Fi icon) / lock; dividers inside list.
+• Actions: “+ Add Network Manually” and “Rescan”; wide Back / Next footer.
+• Password dialog stays high on screen so the dock keyboard does not cover it.
 """
 
 import logging
-import math
-import threading
 from pathlib import Path
 from typing import Optional
 
@@ -41,7 +33,6 @@ from kivy.uix.widget import Widget
 from async_helper import run_async
 from components.button import PrimaryButton, SecondaryButton
 from components.modal_dialog import ModalDialog
-from components.toggle_switch import ToggleSwitch
 from config import ASSETS_DIR, BORDER_RADIUS, COLORS, FONT_SIZES
 from screens.base_screen import BaseScreen
 
@@ -50,8 +41,11 @@ logger = logging.getLogger(__name__)
 WELCOME_DIR = ASSETS_DIR / "welcome"
 LOGO_PATH = str(WELCOME_DIR / "LOGO.png")
 
-# Dark blue-tinted background for WiFi setup
-_BG = (0.043, 0.051, 0.067, 1)
+# Figma frame background #0B0E14; accent blue ~#3B82F6
+_FIGMA_BG = (11 / 255, 14 / 255, 20 / 255, 1)
+_FIGMA_ACCENT = (59 / 255, 130 / 255, 246 / 255, 1)
+_SUBTITLE_GRAY = (0.61, 0.64, 0.69, 1)  # #9CA3AF
+_BG = _FIGMA_BG
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -59,14 +53,21 @@ _BG = (0.043, 0.051, 0.067, 1)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _format_security(sec: str) -> str:
-    s = (sec or "").strip()
-    if not s or s in ("--", "none", "open"):
-        return "Open"
-    s = s.upper().replace("_", " ")
-    for token in ("WPA3", "WPA2", "WPA", "WEP"):
-        if token in s:
-            return token
-    return s[:8]
+    """Security line as in Figma: OPEN, WPA2 PERSONAL, WPA2 ENTERPRISE, …"""
+    s = (sec or "").strip().upper().replace("_", " ")
+    if not s or s in ("--", "NONE", "OPEN"):
+        return "OPEN"
+    if "ENTERPRISE" in s or "8021X" in s or "EAP" in s:
+        if "WPA3" in s:
+            return "WPA3 ENTERPRISE"
+        return "WPA2 ENTERPRISE"
+    if "WPA3" in s:
+        return "WPA3 PERSONAL"
+    if "WPA2" in s or "WPA" in s:
+        return "WPA2 PERSONAL"
+    if "WEP" in s:
+        return "WEP"
+    return s[:24]
 
 
 def _is_open(sec: str) -> bool:
@@ -164,86 +165,119 @@ class _SignalBars(Widget):
                 )
 
 
+class _ConnectingBadge(Widget):
+    """Blue circle with white Wi‑Fi arcs (Figma “connecting” row)."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        super().__init__(**kwargs)
+        self.bind(pos=self._draw, size=self._draw)
+        Clock.schedule_once(lambda *_: self._draw(), 0)
+
+    def _draw(self, *_):
+        self.canvas.clear()
+        cx, cy = self.center_x, self.center_y
+        r = min(self.width, self.height) / 2 - max(1, _suh(2))
+        if r < 4:
+            return
+        with self.canvas:
+            Color(*_FIGMA_ACCENT)
+            Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+            Color(1, 1, 1, 1)
+            for scale in (0.42, 0.68, 0.94):
+                rr = r * 0.5 * scale
+                Line(
+                    circle=(cx, cy - rr * 0.1, rr, 118, 242),
+                    width=max(1.0, _suh(1.5)),
+                )
+
+
+class _ListDivider(Widget):
+    """Full-width hairline between network rows."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", max(1, _suv(1)))
+        super().__init__(**kwargs)
+        self.bind(pos=self._sync, size=self._sync)
+        Clock.schedule_once(lambda *_: self._sync(), 0)
+
+    def _sync(self, *_):
+        self.canvas.clear()
+        with self.canvas:
+            Color(*COLORS["gray_800"])
+            Rectangle(pos=self.pos, size=self.size)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Individual network row
+# Individual network row (flat inside list card; Figma-style)
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+class _IconHit(ButtonBehavior, BoxLayout):
+    """Small tappable area (e.g. rescan) that does not use the row’s main press."""
+
+    pass
+
 
 class _NetworkRow(ButtonBehavior, BoxLayout):
-    """One tappable network row with signal bars, SSID, security badge."""
+    """One tappable row: SSID, security caps, signal or connecting badge, lock/refresh."""
 
-    _H = 64  # logical px; scaled at build time
+    _H = 76  # logical px; scaled — comfortable touch on 1024×600
 
-    def __init__(self, net: dict, connecting_ssid: str, **kwargs):
+    def __init__(
+        self,
+        net: dict,
+        connecting_ssid: str,
+        parent_screen: "WiFiSetupScreen",
+        **kwargs,
+    ):
         self.net = net
+        self.parent_screen = parent_screen
         ssid = (net.get("ssid") or "").strip()
         sec = net.get("security") or ""
         connected = bool(net.get("connected"))
         signal = int(net.get("signal_strength") or 0)
-        busy = (connecting_ssid or "") == ssid
+        busy = (connecting_ssid or "") == ssid and not connected
 
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("height", _suv(self._H))
-        kwargs.setdefault("padding", [_suh(14), _suv(8), _suh(10), _suv(8)])
-        kwargs.setdefault("spacing", _suh(10))
+        kwargs.setdefault("padding", [_suh(16), _suv(10), _suh(14), _suv(10)])
+        kwargs.setdefault("spacing", _suh(12))
         super().__init__(**kwargs)
 
-        # Card background
         with self.canvas.before:
-            self._bg_color = Color(*COLORS["surface"])
-            self._bg = RoundedRectangle(
-                pos=self.pos, size=self.size, radius=[BORDER_RADIUS])
+            self._bg_color = Color(0, 0, 0, 0)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
         self.bind(
             pos=lambda w, *_: setattr(self._bg, "pos", w.pos),
             size=lambda w, *_: setattr(self._bg, "size", w.size),
         )
 
-        # ── Left: signal bars or spinner ──────────────────────────────────
-        left_col = BoxLayout(
-            orientation="vertical",
+        # ── Left: connecting badge or signal bars ─────────────────────────
+        left_wrap = AnchorLayout(
+            anchor_x="center",
+            anchor_y="center",
             size_hint=(None, 1),
-            width=_suh(36),
-            spacing=_suv(2),
+            width=_suh(52),
         )
         if busy:
-            self._spinner_label = Label(
-                text="...",
-                font_size=_suf(FONT_SIZES["small"]),
-                color=COLORS["blue"],
-                halign="center",
-                valign="middle",
-                size_hint=(1, None),
-                height=_suv(22),
-            )
-            self._spinner_event = Clock.schedule_interval(
-                self._tick_spinner, 0.5)
-            left_col.add_widget(Widget(size_hint=(1, 1)))
-            left_col.add_widget(self._spinner_label)
-            left_col.add_widget(Widget(size_hint=(1, 1)))
+            left_wrap.add_widget(
+                _ConnectingBadge(size=(_suh(46), _suv(46))))
+            self._dots = 0
+            self._spinner_event = Clock.schedule_interval(self._tick_connecting, 0.45)
         else:
             bars = _SignalBars(
                 signal=signal,
                 connected=connected,
-                size=(_suh(30), _suv(20)),
+                size=(_suh(32), _suv(22)),
             )
-            bars_anchor = AnchorLayout(
-                anchor_x="center", anchor_y="center", size_hint=(1, 1))
-            bars_anchor.add_widget(bars)
-            left_col.add_widget(bars_anchor)
+            left_wrap.add_widget(bars)
+        self.add_widget(left_wrap)
 
-            pct = Label(
-                text=f"{signal}%",
-                font_size=_suf(FONT_SIZES["tiny"]),
-                color=COLORS["gray_500"] if not connected else COLORS["green"],
-                halign="center",
-                size_hint=(1, None),
-                height=_suv(14),
-            )
-            left_col.add_widget(pct)
-        self.add_widget(left_col)
-
-        # ── Middle: SSID + security ───────────────────────────────────────
-        mid = BoxLayout(orientation="vertical", size_hint=(1, 1), spacing=_suv(3))
+        # ── Middle: SSID + subtitle ───────────────────────────────────────
+        mid = BoxLayout(orientation="vertical", size_hint=(1, 1), spacing=_suv(4))
 
         ssid_lbl = Label(
             text=ssid or "(hidden network)",
@@ -253,43 +287,63 @@ class _NetworkRow(ButtonBehavior, BoxLayout):
             halign="left",
             valign="middle",
             size_hint=(1, None),
-            height=_suv(24),
+            height=_suv(22),
         )
         ssid_lbl.bind(size=ssid_lbl.setter("text_size"))
         mid.add_widget(ssid_lbl)
 
-        sec_txt = "Connecting…" if busy else _format_security(sec)
-        sec_color = COLORS["blue"] if busy else (
-            COLORS["green"] if _is_open(sec) else COLORS["gray_500"])
+        if busy:
+            sec_txt = "Connecting."
+            sec_color = _FIGMA_ACCENT
+        elif connected:
+            sec_txt = "Connected"
+            sec_color = COLORS["green"]
+        else:
+            sec_txt = _format_security(sec)
+            sec_color = _SUBTITLE_GRAY if not _is_open(sec) else COLORS["gray_500"]
+
         sec_lbl = Label(
             text=sec_txt,
-            font_size=_suf(FONT_SIZES["tiny"]),
+            font_size=_suf(FONT_SIZES["small"]),
             color=sec_color,
             halign="left",
             valign="top",
             size_hint=(1, None),
-            height=_suv(16),
+            height=_suv(18),
         )
         sec_lbl.bind(size=sec_lbl.setter("text_size"))
         mid.add_widget(sec_lbl)
+        self._sec_lbl = sec_lbl
         self.add_widget(mid)
 
-        # ── Right: connected dot or padlock label ─────────────────────────
+        # ── Right: refresh (connecting) or lock ────────────────────────────
         right = BoxLayout(
-            orientation="vertical",
+            orientation="horizontal",
             size_hint=(None, 1),
-            width=_suh(30),
+            width=_suh(44),
+            spacing=0,
         )
-        if connected:
-            dot_anchor = AnchorLayout(anchor_x="center", anchor_y="center",
-                                      size_hint=(1, 1))
-            dot = _ConnectedDot(size=(_suv(10), _suv(10)))
-            dot_anchor.add_widget(dot)
-            right.add_widget(dot_anchor)
-        elif not busy and not _is_open(sec):
+        if busy:
+
+            def _rescan(*_a):
+                self.parent_screen._load_networks(rescan=True)
+
+            hit = _IconHit(orientation="vertical", size_hint=(1, 1))
+            rlab = Label(
+                text="\u21bb",
+                font_size=_suf(24),
+                color=COLORS["gray_500"],
+                halign="center",
+                valign="middle",
+            )
+            rlab.bind(size=rlab.setter("text_size"))
+            hit.add_widget(rlab)
+            hit.bind(on_press=_rescan)
+            right.add_widget(hit)
+        elif not _is_open(sec):
             lock = Label(
-                text="LOCK",
-                font_size=_suf(FONT_SIZES["tiny"] - 1),
+                text="\U0001f512",
+                font_size=_suf(16),
                 color=COLORS["gray_600"],
                 halign="center",
                 valign="middle",
@@ -299,36 +353,21 @@ class _NetworkRow(ButtonBehavior, BoxLayout):
             right.add_widget(lock)
         self.add_widget(right)
 
-    def _tick_spinner(self, *_):
-        if hasattr(self, "_spinner_label"):
-            t = self._spinner_label.text
-            self._spinner_label.text = (
-                "." if t == "..." else t + ".")
+    def _tick_connecting(self, *_):
+        if not hasattr(self, "_sec_lbl"):
+            return
+        self._dots = (self._dots + 1) % 4
+        self._sec_lbl.text = "Connecting" + "." * self._dots
 
     def cleanup(self):
         if hasattr(self, "_spinner_event"):
             self._spinner_event.cancel()
 
     def on_press(self):
-        self._bg_color.rgba = COLORS["surface_light"]
+        self._bg_color.rgba = (*COLORS["surface_light"][:3], 0.35)
 
     def on_release(self):
-        self._bg_color.rgba = COLORS["surface"]
-
-
-class _ConnectedDot(Widget):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.bind(pos=self._draw, size=self._draw)
-        Clock.schedule_once(lambda *_: self._draw(), 0)
-
-    def _draw(self, *_):
-        self.canvas.clear()
-        with self.canvas:
-            Color(*COLORS["green"])
-            r = min(self.width, self.height) / 2
-            cx, cy = self.center
-            Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+        self._bg_color.rgba = (0, 0, 0, 0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -453,112 +492,80 @@ class WiFiSetupScreen(BaseScreen):
             size=lambda w, *_: setattr(self._root_bg, "size", w.size),
         )
 
-        # ── Header ────────────────────────────────────────────────────────
-        header = BoxLayout(
+        # ── Brand row (Figma: logo + MeetingBox AI) ─────────────────────────
+        brand = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
-            height=_suv(48),
-            spacing=_suh(10),
+            height=_suv(40),
+            spacing=_suh(8),
         )
         if Path(LOGO_PATH).exists():
-            header.add_widget(Image(
+            brand.add_widget(Image(
                 source=LOGO_PATH,
                 size_hint=(None, 1),
-                width=_suh(36),
+                width=_suh(32),
                 fit_mode="contain",
             ))
-        title_lbl = Label(
-            text="Wi-Fi Setup",
-            font_size=_suf(FONT_SIZES["title"]),
-            bold=True,
+        brand_lbl = Label(
+            text="MeetingBox AI",
+            font_size=_suf(FONT_SIZES["medium"]),
+            bold=False,
             color=COLORS["white"],
             halign="left",
             valign="middle",
             size_hint=(1, 1),
         )
-        title_lbl.bind(size=title_lbl.setter("text_size"))
-        header.add_widget(title_lbl)
-        root.add_widget(header)
+        brand_lbl.bind(size=brand_lbl.setter("text_size"))
+        brand.add_widget(brand_lbl)
+        root.add_widget(brand)
 
-        root.add_widget(Widget(size_hint=(1, None), height=_suv(4)))
+        root.add_widget(Widget(size_hint=(1, None), height=_suv(8)))
 
-        # ── Subtitle ──────────────────────────────────────────────────────
-        sub = Label(
-            text="Select your network to enable calendar sync and email delivery.",
-            font_size=_suf(FONT_SIZES["small"]),
-            color=COLORS["gray_400"],
+        title_main = Label(
+            text="Connect to WiFi",
+            font_size=_suf(FONT_SIZES["large"]),
+            bold=True,
+            color=COLORS["white"],
             halign="left",
             valign="middle",
             size_hint=(1, None),
-            height=_suv(20),
+            height=_suv(30),
+        )
+        title_main.bind(size=title_main.setter("text_size"))
+        root.add_widget(title_main)
+
+        root.add_widget(Widget(size_hint=(1, None), height=_suv(6)))
+
+        sub = Label(
+            text="Required for calendar sync and email delivery.",
+            font_size=_suf(FONT_SIZES["small"]),
+            color=_SUBTITLE_GRAY,
+            halign="left",
+            valign="middle",
+            size_hint=(1, None),
+            height=_suv(22),
         )
         sub.bind(size=sub.setter("text_size"))
         root.add_widget(sub)
 
-        root.add_widget(Widget(size_hint=(1, None), height=_suv(10)))
+        root.add_widget(Widget(size_hint=(1, None), height=_suv(8)))
 
-        # ── Wi-Fi radio toggle row ─────────────────────────────────────────
-        radio_row = BoxLayout(
-            orientation="horizontal",
-            size_hint=(1, None),
-            height=_suv(44),
-            spacing=_suh(12),
-            padding=[_suh(4), 0],
-        )
-        with radio_row.canvas.before:
-            Color(*COLORS["surface"])
-            _radio_bg = RoundedRectangle(
-                pos=radio_row.pos, size=radio_row.size,
-                radius=[BORDER_RADIUS])
-        radio_row.bind(
-            pos=lambda w, *_: setattr(_radio_bg, "pos", w.pos),
-            size=lambda w, *_: setattr(_radio_bg, "size", w.size),
-        )
-        radio_icon = Label(
-            text="WiFi",
-            font_size=_suf(FONT_SIZES["tiny"]),
-            bold=True,
-            color=COLORS["blue"],
-            size_hint=(None, 1),
-            width=_suh(36),
-        )
-        radio_row.add_widget(radio_icon)
-        radio_label = Label(
-            text="Wi-Fi radio",
-            font_size=_suf(FONT_SIZES["medium"]),
-            color=COLORS["white"],
+        self._scan_status_lbl = Label(
+            text="",
+            font_size=_suf(FONT_SIZES["small"]),
             bold=False,
+            color=COLORS["gray_500"],
             halign="left",
             valign="middle",
-            size_hint=(1, 1),
+            size_hint=(1, None),
+            height=_suv(18),
         )
-        radio_label.bind(size=radio_label.setter("text_size"))
-        radio_row.add_widget(radio_label)
-        self._radio_status_lbl = Label(
-            text="",
-            font_size=_suf(FONT_SIZES["tiny"]),
-            color=COLORS["gray_500"],
-            halign="right",
-            valign="middle",
-            size_hint=(None, 1),
-            width=_suh(80),
-        )
-        self._radio_status_lbl.bind(size=self._radio_status_lbl.setter("text_size"))
-        radio_row.add_widget(self._radio_status_lbl)
-        self._wifi_toggle = ToggleSwitch(
-            active=True,
-            on_toggle=self._on_radio_toggled,
-            size_hint=(None, None),
-            size=(_suh(52), _suv(30)),
-            pos_hint={"center_y": 0.5},
-        )
-        radio_row.add_widget(self._wifi_toggle)
-        radio_row.add_widget(Widget(size_hint=(None, 1), width=_suh(8)))
-        root.add_widget(radio_row)
+        self._scan_status_lbl.bind(size=self._scan_status_lbl.setter("text_size"))
+        root.add_widget(self._scan_status_lbl)
 
-        root.add_widget(Widget(size_hint=(1, None), height=_suv(10)))
+        root.add_widget(Widget(size_hint=(1, None), height=_suv(6)))
 
-        # ── Network list card ──────────────────────────────────────────────
+        # ── Network list card (rounded panel + Figma blue outline) ───────
         list_card = BoxLayout(
             orientation="vertical",
             size_hint=(1, 1),
@@ -569,110 +576,98 @@ class WiFiSetupScreen(BaseScreen):
             self._card_bg = RoundedRectangle(
                 pos=list_card.pos, size=list_card.size,
                 radius=[BORDER_RADIUS])
-        list_card.bind(
-            pos=lambda w, *_: setattr(self._card_bg, "pos", w.pos),
-            size=lambda w, *_: setattr(self._card_bg, "size", w.size),
-        )
+        with list_card.canvas.after:
+            Color(*_FIGMA_ACCENT)
+            self._card_outline = Line(width=1.25)
 
-        # Card header row
-        card_hdr = BoxLayout(
-            orientation="horizontal",
-            size_hint=(1, None),
-            height=_suv(38),
-            padding=[_suh(12), _suv(6)],
-        )
-        self._scan_status_lbl = Label(
-            text="Scanning…",
-            font_size=_suf(FONT_SIZES["small"]),
-            bold=True,
-            color=COLORS["gray_400"],
-            halign="left",
-            valign="middle",
-            size_hint=(1, 1),
-        )
-        self._scan_status_lbl.bind(size=self._scan_status_lbl.setter("text_size"))
-        card_hdr.add_widget(self._scan_status_lbl)
+        def _list_card_geom(*_a):
+            self._card_bg.pos = list_card.pos
+            self._card_bg.size = list_card.size
+            inset = max(1.0, float(_suh(1)))
+            self._card_outline.rounded_rectangle = (
+                list_card.x + inset,
+                list_card.y + inset,
+                max(0.0, list_card.width - 2 * inset),
+                max(0.0, list_card.height - 2 * inset),
+                BORDER_RADIUS,
+            )
 
-        scan_btn = _TextBtn(
-            text="Scan",
-            font_size=_suf(FONT_SIZES["small"]),
-            color=COLORS["blue"],
-            halign="right",
-            valign="middle",
-            size_hint=(None, 1),
-            width=_suh(52),
-        )
-        scan_btn.bind(size=scan_btn.setter("text_size"))
-        scan_btn.bind(on_press=lambda *_: self._load_networks(rescan=True))
-        card_hdr.add_widget(scan_btn)
+        list_card.bind(pos=_list_card_geom, size=_list_card_geom)
+        Clock.schedule_once(_list_card_geom, 0)
 
-        add_btn = _TextBtn(
-            text="+ Add",
-            font_size=_suf(FONT_SIZES["small"]),
-            color=COLORS["blue"],
-            halign="right",
-            valign="middle",
-            size_hint=(None, 1),
-            width=_suh(52),
-        )
-        add_btn.bind(size=add_btn.setter("text_size"))
-        add_btn.bind(on_press=lambda *_: self._show_manual_dialog())
-        card_hdr.add_widget(add_btn)
-        list_card.add_widget(card_hdr)
-
-        # Separator
-        sep = Widget(size_hint=(1, None), height=1)
-        with sep.canvas:
-            Color(*COLORS["gray_800"])
-            _sr = Rectangle(pos=sep.pos, size=sep.size)
-        sep.bind(
-            pos=lambda w, *_: setattr(_sr, "pos", w.pos),
-            size=lambda w, *_: setattr(_sr, "size", w.size),
-        )
-        list_card.add_widget(sep)
-
-        # Scrollable network list
         self._scroll = ScrollView(
             do_scroll_x=False,
             size_hint=(1, 1),
             bar_width=_suh(4),
-            bar_color=[*COLORS["blue"][:3], 0.6],
+            bar_color=[*_FIGMA_ACCENT[:3], 0.55],
             bar_inactive_color=[*COLORS["gray_700"][:3], 0.4],
         )
         self._list = GridLayout(
             cols=1,
-            spacing=_suv(6),
+            spacing=0,
             size_hint_y=None,
-            padding=[_suh(10), _suv(8), _suh(10), _suv(8)],
+            padding=[_suh(12), _suv(10), _suh(12), _suv(10)],
         )
         self._list.bind(minimum_height=self._list.setter("height"))
         self._scroll.add_widget(self._list)
         list_card.add_widget(self._scroll)
         root.add_widget(list_card)
 
-        root.add_widget(Widget(size_hint=(1, None), height=_suv(10)))
+        # ── + Add manually | Rescan (below card, Figma) ───────────────────
+        actions = BoxLayout(
+            orientation="horizontal",
+            size_hint=(1, None),
+            height=_suv(42),
+            spacing=_suh(8),
+            padding=[0, _suv(6), 0, 0],
+        )
+        add_link = _TextBtn(
+            text="+ Add Network Manually",
+            font_size=_suf(FONT_SIZES["medium"]),
+            color=_FIGMA_ACCENT,
+            halign="left",
+            valign="middle",
+            size_hint=(None, 1),
+            width=_suh(260),
+        )
+        add_link.bind(size=add_link.setter("text_size"))
+        add_link.bind(on_press=lambda *_: self._show_manual_dialog())
+        actions.add_widget(add_link)
+        actions.add_widget(Widget(size_hint=(1, 1)))
+        rescan_btn = _TextBtn(
+            text="\u21bb  Rescan",
+            font_size=_suf(FONT_SIZES["medium"]),
+            color=COLORS["gray_500"],
+            halign="right",
+            valign="middle",
+            size_hint=(None, 1),
+            width=_suh(120),
+        )
+        rescan_btn.bind(size=rescan_btn.setter("text_size"))
+        rescan_btn.bind(on_press=lambda *_: self._load_networks(rescan=True))
+        actions.add_widget(rescan_btn)
+        root.add_widget(actions)
 
-        # ── Footer: Back | spacer | Next ──────────────────────────────────
+        root.add_widget(Widget(size_hint=(1, None), height=_suv(6)))
+
+        # ── Footer: equal wide Back / Next ─────────────────────────────────
         foot = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
-            height=_suv(52),
+            height=_suv(56),
             spacing=_suh(12),
         )
         back_btn = SecondaryButton(
             text="Back",
-            size_hint=(None, 1),
-            width=_suh(100),
+            size_hint=(0.5, 1),
             font_size=_suf(FONT_SIZES["medium"]),
         )
         back_btn.bind(on_press=lambda *_: self.go_back())
         foot.add_widget(back_btn)
-        foot.add_widget(Widget(size_hint=(1, 1)))
 
         self._next_btn = PrimaryButton(
-            text="Next  →",
-            size_hint=(None, 1),
-            width=_suh(130),
+            text="Next",
+            size_hint=(0.5, 1),
             font_size=_suf(FONT_SIZES["medium"]),
         )
         self._next_btn.bind(on_press=self._on_next)
@@ -689,7 +684,6 @@ class WiFiSetupScreen(BaseScreen):
         self._ready_for_next = False
         self._connected_ssid = ""
         self._sync_next_btn()
-        self._sync_radio_toggle()
         self._load_networks(rescan=True)
 
     def on_leave(self):
@@ -714,43 +708,6 @@ class WiFiSetupScreen(BaseScreen):
         self.app.connected_wifi_ssid = self._connected_ssid
         self.app.setup_network_is_ethernet = False
         self.goto("wifi_connected", transition="fade")
-
-    # ── Radio toggle ──────────────────────────────────────────────────────
-
-    def _sync_radio_toggle(self):
-        en = wifi_nmcli_local.get_wifi_radio_enabled()
-        if en is not None:
-            self._wifi_toggle.active = bool(en)
-            self._radio_status_lbl.text = "On" if en else "Off"
-
-    def _on_radio_toggled(self, active: bool):
-        self._radio_status_lbl.text = "On" if active else "Off"
-
-        def work():
-            result = wifi_nmcli_local.set_wifi_radio(active)
-            Clock.schedule_once(
-                lambda *_: self._after_radio_set(result, active), 0)
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _after_radio_set(self, result: dict, wanted_on: bool):
-        if not result.get("ok"):
-            msg = (result.get("message") or "Could not change Wi-Fi.").strip()
-            self._wifi_toggle.active = not wanted_on
-            self._radio_status_lbl.text = "On" if (not wanted_on) else "Off"
-            self.add_widget(ModalDialog(
-                title="Wi-Fi",
-                message=msg[:280],
-                confirm_text="OK",
-                cancel_text="",
-            ))
-            return
-        if wanted_on:
-            self._load_networks(rescan=True)
-        else:
-            self._stop_scan_anim()
-            self.networks = []
-            self._populate()
 
     # ── Scanning animation ────────────────────────────────────────────────
 
@@ -833,10 +790,14 @@ class WiFiSetupScreen(BaseScreen):
             return (0 if n.get("connected") else 1,
                     -(n.get("signal_strength") or 0))
 
+        first = True
         for net in sorted(self.networks, key=_key):
             if not (net.get("ssid") or "").strip():
                 continue
-            row = _NetworkRow(net, self._connecting_ssid or "")
+            if not first:
+                self._list.add_widget(_ListDivider())
+            first = False
+            row = _NetworkRow(net, self._connecting_ssid or "", self)
             row.bind(on_press=lambda inst, n=net: self._on_row_tap(n))
             self._list.add_widget(row)
             self._row_widgets.append(row)
