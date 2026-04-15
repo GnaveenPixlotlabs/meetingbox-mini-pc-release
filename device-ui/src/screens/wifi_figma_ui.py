@@ -19,7 +19,7 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
-from config import BORDER_RADIUS, COLORS, FONT_SIZES
+from config import BORDER_RADIUS, COLORS, DISPLAY_WIDTH, FONT_SIZES
 
 # Figma frame background #0B0E14; accent blue ~#3B82F6
 FIGMA_BG = (11 / 255, 14 / 255, 20 / 255, 1)
@@ -396,9 +396,12 @@ def build_figma_wifi_column(logo_path: str, *, layout_scale: float = 1.0) -> dic
     def sf(fs: float) -> int:
         return max(5, int(round(float(fs) * ls * _sv())))
 
+    narrow = DISPLAY_WIDTH < 720
+    pad_h = sh(14) if narrow else sh(20)
+
     root = BoxLayout(
         orientation="vertical",
-        padding=[sh(20), sv(12), sh(20), sv(12)],
+        padding=[pad_h, sv(12), pad_h, sv(12)],
         spacing=0,
         size_hint=(1, 1),
     )
@@ -538,6 +541,7 @@ def build_figma_wifi_column(logo_path: str, *, layout_scale: float = 1.0) -> dic
         spacing=sh(8),
         padding=[0, sv(6), 0, 0],
     )
+    add_w = min(sh(260), max(sh(140), int(DISPLAY_WIDTH * 0.78)))
     add_link = FigmaTextLink(
         text="+ Add Network Manually",
         font_size=sf(FONT_SIZES["medium"]),
@@ -545,11 +549,12 @@ def build_figma_wifi_column(logo_path: str, *, layout_scale: float = 1.0) -> dic
         halign="left",
         valign="middle",
         size_hint=(None, 1),
-        width=sh(260),
+        width=add_w,
     )
     add_link.bind(size=add_link.setter("text_size"))
     actions.add_widget(add_link)
     actions.add_widget(Widget(size_hint=(1, 1)))
+    rescan_w = min(sh(120), max(sh(72), int(DISPLAY_WIDTH * 0.34)))
     rescan_btn = FigmaTextLink(
         text="\u21bb  Rescan",
         font_size=sf(FONT_SIZES["medium"]),
@@ -557,7 +562,7 @@ def build_figma_wifi_column(logo_path: str, *, layout_scale: float = 1.0) -> dic
         halign="right",
         valign="middle",
         size_hint=(None, 1),
-        width=sh(120),
+        width=rescan_w,
     )
     rescan_btn.bind(size=rescan_btn.setter("text_size"))
     actions.add_widget(rescan_btn)

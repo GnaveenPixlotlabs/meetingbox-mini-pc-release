@@ -245,7 +245,12 @@ def display_vertical_scale_raw() -> float:
 
 def display_horizontal_scale_raw() -> float:
     """Width vs 1024px design baseline (capped)."""
-    return min(max(DISPLAY_WIDTH / 1024.0, 0.85), 3.2)
+    ratio = DISPLAY_WIDTH / 1024.0
+    # Panels narrower than the 1024 design width (e.g. portrait 600×1024) must scale
+    # down; the old 0.85 floor made everything oversized horizontally.
+    if DISPLAY_WIDTH < 1024:
+        return min(max(ratio, 0.48), 3.2)
+    return min(max(ratio, 0.85), 3.2)
 
 
 # Home uses this factor on top of display scale; other screens use OTHER (20% larger than home).
@@ -273,8 +278,10 @@ def other_screen_horizontal_scale() -> float:
 def home_center_column_width() -> int:
     """Wide panels: wide centered column; small panels: nearly full width (before HOME_CONTENT_SCALE)."""
     side = SPACING["screen_padding"] * 4
+    usable = max(1, DISPLAY_WIDTH - side)
     if DISPLAY_WIDTH <= 1440:
-        return max(360, DISPLAY_WIDTH - side)
+        # Never wider than the display (old max(360, …) could exceed narrow widths).
+        return max(160, usable)
     return min(2200, max(720, int(DISPLAY_WIDTH * 0.56)))
 
 

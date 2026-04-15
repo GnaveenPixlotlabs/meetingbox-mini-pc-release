@@ -19,6 +19,7 @@ from components.button import PrimaryButton
 from config import (
     ASSETS_DIR,
     COLORS,
+    DISPLAY_WIDTH,
     FONT_SIZES,
     HOME_CONTENT_SCALE,
     SPACING,
@@ -177,7 +178,10 @@ class HomeScreen(BaseScreen):
         # Layout scales from 1024×600; home uses HOME_CONTENT_SCALE vs raw display scale.
         sv = home_layout_vertical_scale()
         sh = home_layout_horizontal_scale()
-        col_w = max(360, int(home_center_column_width() * HOME_CONTENT_SCALE))
+        col_w = max(
+            160,
+            min(DISPLAY_WIDTH - 24, int(home_center_column_width() * HOME_CONTENT_SCALE)),
+        )
         chip_sz = max(_CHIP_SIZE, int(_CHIP_SIZE * sv))
         icon_in = max(_ICON_SIZE, int(_ICON_SIZE * sv))
         top_h = max(50, int(62 * sv))
@@ -198,8 +202,12 @@ class HomeScreen(BaseScreen):
         stat_row_h = max(24, int(28 * sv))
         # Stats BoxLayout height must equal two rows + spacing or inner layout overlaps.
         stats_col_h = max(58, stat_row_h * 2 + stats_spacing)
-        # Button nearly full column width on ultrawide; scale with width ratio.
-        btn_w = min(max(400, col_w - 96), int(440 * sh))
+        # Button: fit column; on narrow portrait (600-wide) avoid a 400px minimum.
+        btn_w = min(
+            max(240, col_w - 40),
+            int(440 * sh),
+            max(200, DISPLAY_WIDTH - 32),
+        )
         btn_h = max(56, int(70 * sv))
         btn_pad_b = max(14, int(22 * sv))
         # Row height minus bottom padding is the slot for the button; btn_h must fit inside.

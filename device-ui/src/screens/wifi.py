@@ -22,7 +22,7 @@ from network_util import linux_ethernet_ready
 from components.button import PrimaryButton, SecondaryButton
 from components.modal_dialog import ModalDialog
 from components.status_bar import StatusBar
-from config import ASSETS_DIR, BORDER_RADIUS, COLORS, FONT_SIZES
+from config import ASSETS_DIR, BORDER_RADIUS, COLORS, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_SIZES
 from screens.base_screen import BaseScreen
 from screens.wifi_figma_ui import (
     FigmaListDivider,
@@ -37,9 +37,11 @@ logger = logging.getLogger(__name__)
 WELCOME_DIR = ASSETS_DIR / "welcome"
 LOGO_PATH = str(WELCOME_DIR / "LOGO.png")
 
-# Slightly smaller than full-screen onboarding: status bar steals height; same logical
-# density otherwise feels “zoomed in”.
-_HOME_WIFI_FIGMA_LAYOUT_SCALE = 0.88
+# Home path: status bar steals height. Portrait (DISPLAY_HEIGHT > DISPLAY_WIDTH, e.g. 600×1024)
+# already uses lower horizontal scale from config — don’t double-shrink.
+_HOME_WIFI_FIGMA_LAYOUT_SCALE = (
+    1.0 if DISPLAY_HEIGHT > DISPLAY_WIDTH else 0.88
+)
 
 
 class WiFiScreen(BaseScreen):
