@@ -41,20 +41,27 @@ _CTA = (74 / 255.0, 143 / 255.0, 217 / 255.0, 1)
 
 # Nominal vertical design units for the main column (pre-scale). Tuned so that on
 # 800px-tall panels with OTHER_CONTENT_SCALE, body content fits without clipping.
-_PROCESSING_BODY_STACK_PX = 730
+_PROCESSING_BODY_STACK_PX = 820
 
 
 def _compute_processing_layout_fit() -> float:
     """Shrink processing UI on short displays (e.g. 800px height) vs 1024×600 baseline."""
     v = other_screen_vertical_scale()
-    header_h = int(round(58 * v))
-    footer_h = int(round(56 * v))
-    margin = int(round(16 * v))
-    avail = max(240, DISPLAY_HEIGHT - header_h - footer_h - margin)
+    header_h = int(round(52 * v))
+    footer_h = int(round(48 * v))
+    # Extra breathing room so header/footer are not flush with bezel (7\" panels).
+    # Includes approximate root safe-area padding applied in _build_ui.
+    margin = int(round((28 + 24) * v))
+    avail = max(220, DISPLAY_HEIGHT - header_h - footer_h - margin)
     need = _PROCESSING_BODY_STACK_PX * v
     if need <= avail:
-        return 1.0
-    return max(0.50, min(1.0, float(avail) / float(max(need, 1))))
+        fit = 1.0
+    else:
+        fit = float(avail) / float(max(need, 1))
+    # Short landscape panels: cap a bit tighter so CTA + stage card stay on-screen.
+    if DISPLAY_HEIGHT <= 880:
+        fit = min(fit, float(avail) / float(max(int(760 * v), 1)))
+    return max(0.42, min(1.0, fit))
 
 
 class _HeroCheckCircle(Widget):
@@ -116,10 +123,13 @@ class _StageMark(Widget):
                 Line(circle=(cx, cy, r), width=max(1.5, r * 0.14))
             else:
                 Color(*_SUCCESS)
-                lw = max(2.0, r * 0.18)
-                x0, y0 = cx - r * 0.45, cy
-                x1, y1 = cx - r * 0.12, cy - r * 0.42
-                x2, y2 = cx + r * 0.5, cy + r * 0.38
+                # Filled circle + white check (matches Figma; reads on low-DPI touch panels).
+                Ellipse(pos=(cx - r * 0.85, cy - r * 0.85), size=(r * 1.7, r * 1.7))
+                Color(1, 1, 1, 1)
+                lw = max(2.2, r * 0.22)
+                x0, y0 = cx - r * 0.48, cy - r * 0.02
+                x1, y1 = cx - r * 0.12, cy - r * 0.40
+                x2, y2 = cx + r * 0.52, cy + r * 0.34
                 Line(points=[x0, y0, x1, y1, x2, y2], width=lw, cap="round", joint="round")
 
 
@@ -136,7 +146,7 @@ class _StageRow(BoxLayout):
 
     def __init__(self, title: str, subtitle: str, show_connector: bool, parent_screen, **kwargs):
         ps = parent_screen
-        row_h = ps.pv(68 if show_connector else 44)
+        row_h = ps.pv(62 if show_connector else 40)
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint", (1, None))
         kwargs.setdefault("height", row_h)
@@ -146,7 +156,7 @@ class _StageRow(BoxLayout):
         self._state = "pending"
         self._screen = parent_screen
 
-        mark_sz = ps.ph(22)
+        mark_sz = max(ps.ph(24), ps.pv(24))
         left = BoxLayout(
             orientation="vertical",
             size_hint=(None, 1),
@@ -238,7 +248,15 @@ class ProcessingScreen(BaseScreen):
         return max(6, int(round(float(fs) * v * self._layout_fit)))
 
     def _build_ui(self):
-        root = BoxLayout(orientation="vertical")
+        root = BoxLayout(
+            orientation="vertical",
+            padding=[
+                self.ph(16),
+                self.pv(10),
+                self.ph(16),
+                self.pv(10),
+            ],
+        )
         with root.canvas.before:
             Color(*_BG)
             self._bg_rect = Rectangle(pos=root.pos, size=root.size)
@@ -336,18 +354,21 @@ class ProcessingScreen(BaseScreen):
         root.add_widget(header)
 
         body = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(1, 1))
-        col_w = min(self.ph(720), max(self.ph(480), DISPLAY_WIDTH - self.ph(40)))
+        col_w = min(
+            self.ph(680),
+            max(self.ph(420), DISPLAY_WIDTH - self.ph(56)),
+        )
         col_sp = self.pv(6)
         card_pad_v = self.pv(12)
-        r1, r2, r3 = self.pv(68), self.pv(68), self.pv(44)
+        r1, r2, r3 = self.pv(62), self.pv(62), self.pv(40)
         card_sp = self.pv(6)
         card_inner_h = card_pad_v * 2 + r1 + r2 + r3 + card_sp * 2
         card_wrap_h = card_inner_h + self.pv(2)
 
-        sub_h = self.pv(48)
-        hero_h = self.pv(218)
-        cta_h = self.pv(48)
-        link_h = self.pv(20)
+        sub_h = self.pv(44)
+        hero_h = self.pv(198)
+        cta_h = self.pv(44)
+        link_h = self.pv(18)
         col_h = (
             hero_h
             + card_wrap_h
@@ -388,8 +409,8 @@ class ProcessingScreen(BaseScreen):
             spacing=self.pv(4),
         )
 
-        check_sz = self.ph(84)
-        check_wrap = AnchorLayout(size_hint=(1, None), height=self.pv(92), anchor_x="center", anchor_y="center")
+        check_sz = self.ph(72)
+        check_wrap = AnchorLayout(size_hint=(1, None), height=self.pv(82), anchor_x="center", anchor_y="center")
         check = _HeroCheckCircle(size_px=check_sz)
         check_wrap.add_widget(check)
         hero_col.add_widget(check_wrap)
@@ -447,7 +468,7 @@ class ProcessingScreen(BaseScreen):
             halign="center",
             valign="middle",
             size_hint=(1, None),
-            height=self.pv(40),
+            height=self.pv(36),
         )
         self.title_label.bind(size=self.title_label.setter("text_size"))
         hero_col.add_widget(self.title_label)
@@ -518,7 +539,7 @@ class ProcessingScreen(BaseScreen):
             bold=True,
             color=COLORS["white"],
             size_hint=(None, None),
-            size=(min(self.ph(420), col_w - self.ph(16)), self.pv(48)),
+            size=(min(self.ph(400), col_w - self.ph(24)), self.pv(44)),
             background_normal="",
             background_down="",
             background_color=(0, 0, 0, 0),
@@ -682,6 +703,8 @@ class ProcessingScreen(BaseScreen):
     def set_processing_status(self, text: str):
         if not text:
             return
+        if self._summary_ready:
+            return
         low = text.lower()
         if "transcription done" in low or "building" in low:
             self._set_stage_progress(1)
@@ -700,12 +723,14 @@ class ProcessingScreen(BaseScreen):
             else:
                 self.footer_right.text = f"Analysis ETA {eta // 60} min"
 
+        if self._summary_ready:
+            return
         p = max(0, min(100, int(progress or 0)))
         if p < 34:
             self._set_stage_progress(0)
         elif p < 84:
             self._set_stage_progress(1)
-        elif not self._summary_ready:
+        else:
             self._set_stage_progress(2)
 
     def on_summary_ready(self, meeting_id: str, summary_data: dict):
