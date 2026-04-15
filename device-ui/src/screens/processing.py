@@ -8,6 +8,7 @@ Flow:
 """
 
 import logging
+import math
 import time
 
 from kivy.clock import Clock
@@ -15,6 +16,7 @@ from kivy.graphics import Color, Ellipse, Line, Rectangle, RoundedRectangle
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
@@ -55,6 +57,69 @@ def _compute_processing_layout_fit() -> float:
         return 1.0
     # Floor ~0.58: keeps touch targets readable; stack estimate is conservative.
     return max(0.58, min(1.0, float(avail) / float(max(need, 1))))
+
+
+_PROC_ASSETS = ASSETS_DIR / "processing"
+_REC_ASSETS = ASSETS_DIR / "recording"
+_HEADER_GEAR_PROC = _PROC_ASSETS / "header_gear.png"
+_HEADER_PROFILE_RING = _PROC_ASSETS / "header_profile_ring.png"
+
+
+class _CanvasHeaderGlyph(Widget):
+    """Help (?) and user bust when ``header_help.png`` / ``header_user.png`` are missing."""
+
+    def __init__(self, kind: str, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (22, 22))
+        super().__init__(**kwargs)
+        self._kind = kind
+        self.bind(pos=self._draw, size=self._draw)
+        Clock.schedule_once(lambda *_: self._draw(), 0)
+
+    def _draw(self, *_):
+        self.canvas.clear()
+        cx, cy = self.center_x, self.center_y
+        rr = min(self.width, self.height) * 0.48
+        if rr < 2:
+            return
+        c = (0.78, 0.82, 0.86, 1)
+        lw = max(1.8, rr * 0.12)
+        with self.canvas:
+            Color(*c)
+            if self._kind == "gear":
+                ir = rr * 0.2
+                orad = rr * 0.42
+                Line(circle=(cx, cy, ir), width=lw)
+                for i in range(6):
+                    a = (math.pi / 3.0) * i
+                    x0 = cx + math.cos(a) * ir * 0.9
+                    y0 = cy + math.sin(a) * ir * 0.9
+                    x1 = cx + math.cos(a) * orad
+                    y1 = cy + math.sin(a) * orad
+                    Line(points=[x0, y0, x1, y1], width=lw, cap="round")
+            elif self._kind == "help":
+                # Arc (partial circle) + stem + dot
+                Line(circle=(cx, cy + rr * 0.06, rr * 0.28, 70, 305), width=lw)
+                Line(points=[cx, cy + rr * 0.1, cx, cy - rr * 0.4], width=lw, cap="round")
+                Ellipse(pos=(cx - rr * 0.08, cy - rr * 0.54), size=(rr * 0.16, rr * 0.16))
+            else:
+                # Head + shoulders (U)
+                Ellipse(pos=(cx - rr * 0.32, cy - rr * 0.02), size=(rr * 0.64, rr * 0.66))
+                Line(
+                    points=[
+                        cx - rr * 0.52,
+                        cy + rr * 0.52,
+                        cx - rr * 0.32,
+                        cy - rr * 0.02,
+                        cx + rr * 0.32,
+                        cy - rr * 0.02,
+                        cx + rr * 0.52,
+                        cy + rr * 0.52,
+                    ],
+                    width=lw,
+                    cap="round",
+                    joint="round",
+                )
 
 
 class _HeroCheckCircle(Widget):
@@ -221,7 +286,6 @@ class ProcessingScreen(BaseScreen):
         self._pulse_event = None
         self._pulse_alpha = 0.20
         self._pulse_dir = 1
-        self._header_icon_decor = []
         self._layout_fit = _compute_processing_layout_fit()
         self._build_ui()
 
@@ -241,6 +305,17 @@ class ProcessingScreen(BaseScreen):
         v = other_screen_vertical_scale()
         t = max(self._layout_fit, 0.82) if self._layout_fit < 1.0 else 1.0
         return max(6, int(round(float(fs) * v * t)))
+
+    def _sync_cta_chevron(self, inst, *args):
+        ch = getattr(self, "_cta_chevron", None)
+        if ch is None or inst is None:
+            return
+        pad = self.ph(20)
+        tri_h = self.pv(10)
+        x2 = inst.right - pad
+        x0 = x2 - self.ph(12)
+        cy = inst.center_y
+        ch.points = [x0, cy - tri_h, x2, cy, x0, cy + tri_h]
 
     def _build_ui(self):
         root = BoxLayout(orientation="vertical")
@@ -303,40 +378,116 @@ class ProcessingScreen(BaseScreen):
         header.add_widget(left)
         header.add_widget(Widget())
         right = BoxLayout(orientation="horizontal", size_hint=(None, 1), width=self.ph(146), spacing=self.ph(10))
-        for idx, sym in enumerate(("\u2699", "?", "\u25CF")):
-            b = Label(
-                text=sym,
-                font_size=self.pf(FONT_SIZES["small"] + 1),
-                color=(200 / 255.0, 213 / 255.0, 230 / 255.0, 1),
-                halign="center",
-                valign="middle",
-                size_hint=(None, None),
-                size=(self.ph(36), self.pv(36)),
-            )
-            b.bind(size=b.setter("text_size"))
-            with b.canvas.before:
-                Color(*COLORS["surface"])
-                rr = RoundedRectangle(pos=b.pos, size=b.size, radius=[999])
-                if idx == 2:
-                    Color(74 / 255.0, 143 / 255.0, 217 / 255.0, 0.22)
-                    border = Line(circle=(b.center_x, b.center_y, max(1, b.width / 2 - 1)), width=1.8)
-                    self._header_icon_decor.append((rr, border))
+        try:
+            _PROC_ASSETS.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.debug("Could not create %s", _PROC_ASSETS)
+        _gear_src = (
+            _HEADER_GEAR_PROC
+            if _HEADER_GEAR_PROC.is_file()
+            else (_REC_ASSETS / "setteing gear icon.png")
+        )
+        _header_specs = (
+            (_gear_src, "gear"),
+            (_PROC_ASSETS / "header_help.png", "help"),
+            (_PROC_ASSETS / "header_user.png", "user"),
+        )
+        _cell_sz = (self.ph(40), self.pv(40))
+        for idx, (img_path, glyph) in enumerate(_header_specs):
+            # Third control: Figma exports ring (Button…) + user glyph (Container…) stacked.
+            if idx == 2 and _HEADER_PROFILE_RING.is_file():
+                cell = FloatLayout(size_hint=(None, None), size=_cell_sz)
+                ring = Image(
+                    source=str(_HEADER_PROFILE_RING),
+                    size_hint=(1, 1),
+                    pos_hint={"x": 0, "y": 0},
+                    allow_stretch=True,
+                    keep_ratio=True,
+                    fit_mode="contain",
+                )
+                cell.add_widget(ring)
+                user_p = _PROC_ASSETS / "header_user.png"
+                if user_p.is_file():
+                    cell.add_widget(
+                        Image(
+                            source=str(user_p),
+                            size_hint=(None, None),
+                            size=(self.ph(22), self.pv(22)),
+                            pos_hint={"center_x": 0.5, "center_y": 0.5},
+                            fit_mode="contain",
+                            allow_stretch=True,
+                        )
+                    )
                 else:
-                    self._header_icon_decor.append((rr, None))
-            b.bind(
-                pos=lambda w, _, r=rr: setattr(r, "pos", w.pos),
-                size=lambda w, _, r=rr: setattr(r, "size", w.size),
+                    cell.add_widget(
+                        _CanvasHeaderGlyph(
+                            glyph,
+                            size_hint=(None, None),
+                            size=(self.ph(22), self.pv(22)),
+                            pos_hint={"center_x": 0.5, "center_y": 0.5},
+                        )
+                    )
+                right.add_widget(cell)
+                continue
+
+            cell = AnchorLayout(
+                size_hint=(None, None),
+                size=_cell_sz,
+                anchor_x="center",
+                anchor_y="center",
+            )
+            with cell.canvas.before:
+                Color(*COLORS["surface"])
+                cell_bg = RoundedRectangle(pos=cell.pos, size=cell.size, radius=[999])
+            cell.bind(
+                pos=lambda w, _bg=cell_bg: setattr(_bg, "pos", w.pos),
+                size=lambda w, _bg=cell_bg: setattr(_bg, "size", w.size),
             )
             if idx == 2:
-                b.bind(
-                    center=lambda w, _, bd=border: setattr(
-                        bd, "circle", (w.center_x, w.center_y, max(1, w.width / 2 - 2))
+                with cell.canvas.after:
+                    Color(74 / 255.0, 143 / 255.0, 217 / 255.0, 0.22)
+                    cell_border = Line(
+                        circle=(
+                            cell.center_x,
+                            cell.center_y,
+                            max(1, min(cell.width, cell.height) / 2 - 2),
+                        ),
+                        width=1.8,
+                    )
+                cell.bind(
+                    pos=lambda w, _bd=cell_border: setattr(
+                        _bd,
+                        "circle",
+                        (w.center_x, w.center_y, max(1, min(w.width, w.height) / 2 - 2)),
                     ),
-                    size=lambda w, _, bd=border: setattr(
-                        bd, "circle", (w.center_x, w.center_y, max(1, w.width / 2 - 2))
+                    size=lambda w, _bd=cell_border: setattr(
+                        _bd,
+                        "circle",
+                        (w.center_x, w.center_y, max(1, min(w.width, w.height) / 2 - 2)),
                     ),
                 )
-            right.add_widget(b)
+            if img_path.is_file():
+                img = Image(
+                    source=str(img_path),
+                    size_hint=(None, None),
+                    size=(self.ph(22), self.pv(22)),
+                    fit_mode="contain",
+                    allow_stretch=True,
+                )
+                cell.add_widget(img)
+            else:
+                logger.debug(
+                    "Processing header: missing %s — vector fallback (optional: %s)",
+                    img_path.name,
+                    _PROC_ASSETS,
+                )
+                cell.add_widget(
+                    _CanvasHeaderGlyph(
+                        glyph,
+                        size=(self.ph(22), self.pv(22)),
+                    )
+                )
+            right.add_widget(cell)
         header.add_widget(right)
         root.add_widget(header)
 
@@ -519,7 +670,7 @@ class ProcessingScreen(BaseScreen):
         # CTA
         cta_wrap = AnchorLayout(size_hint=(1, None), height=cta_h, anchor_x="center", anchor_y="center")
         self.summary_btn = Button(
-            text="View Meeting Summary →",
+            text="View Meeting Summary",
             font_size=self.pf(FONT_SIZES["medium"] + 2),
             bold=True,
             color=COLORS["white"],
@@ -545,6 +696,16 @@ class ProcessingScreen(BaseScreen):
                 size=self.summary_btn.size,
                 radius=[999],
             )
+            self._cta_chv_col = Color(1, 1, 1, self.summary_btn.opacity)
+            self._cta_chevron = Line(
+                width=max(2.0, float(self.pv(2))),
+                cap="round",
+                joint="round",
+            )
+        self.summary_btn.bind(
+            pos=self._sync_cta_chevron,
+            size=self._sync_cta_chevron,
+        )
         self.summary_btn.bind(
             pos=lambda w, *_: setattr(self._cta_bg, "pos", w.pos),
             size=lambda w, *_: setattr(self._cta_bg, "size", w.size),
@@ -555,7 +716,11 @@ class ProcessingScreen(BaseScreen):
             size=lambda w, *_: setattr(self._cta_shadow, "size", w.size),
             opacity=lambda _, a: setattr(self._cta_shadow_color, "rgba", (74 / 255.0, 143 / 255.0, 217 / 255.0, 0.24 * a)),
         )
+        self.summary_btn.bind(
+            opacity=lambda _, a: setattr(self._cta_chv_col, "rgba", (1, 1, 1, a)),
+        )
         self.summary_btn.bind(on_press=self._open_summary)
+        Clock.schedule_once(lambda *_: self._sync_cta_chevron(self.summary_btn), 0)
         cta_wrap.add_widget(self.summary_btn)
         col.add_widget(cta_wrap)
 
