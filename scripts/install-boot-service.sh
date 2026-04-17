@@ -69,7 +69,7 @@ EOF
 cat >"$SERVICE_PATH" <<EOF
 [Unit]
 Description=MeetingBox appliance (Docker Compose + UI)
-Documentation=https://github.com/ (see mini-pc/README.md)
+Documentation=https://github.com/
 # Do not order After=network-online.target — it can delay the kiosk UI for minutes with no
 # user-visible progress. Docker / BACKEND_URL retries inside the app are enough for WAN.
 After=docker.service network.target display-manager.service meetingbox-docker-audio.service graphical.target
@@ -82,7 +82,8 @@ User=$RUN_AS_USER
 Group=$RUN_AS_USER
 WorkingDirectory=$APPLIANCE_DIR
 Environment=HOME=$RUN_AS_HOME
-ExecStart=$APPLIANCE_DIR/scripts/kiosk-compose-up.sh $APPLIANCE_DIR
+# Use explicit bash — avoids systemd 203/EXEC if the script lost +x or has a broken shebang (e.g. CRLF).
+ExecStart=/usr/bin/bash $APPLIANCE_DIR/scripts/kiosk-compose-up.sh $APPLIANCE_DIR
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=300
 

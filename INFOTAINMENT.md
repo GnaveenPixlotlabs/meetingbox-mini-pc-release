@@ -60,6 +60,7 @@ Typical causes:
 - **Still on the Ubuntu session** — `XSession` must be `meetingbox-kiosk` and GDM must auto-login into that session (see script output). Re-run `sudo bash scripts/setup-infotainment-kiosk.sh` then reboot.
 - **`meetingbox` not in group `docker`** — kiosk session cannot run `docker compose`. `sudo usermod -aG docker meetingbox`, then log out completely or reboot.
 - **No containers** — ensure `.env` exists; if it has no `COMPOSE_PROFILES=`, current `kiosk-compose-up.sh` defaults to `mini-pc,docker-audio`. Check `journalctl -t meetingbox-kiosk-compose -b` and `docker ps -a`.
+- **`meetingbox-appliance.service` failed with `status=203/EXEC`** — the systemd unit could not run `kiosk-compose-up.sh` (bad shebang/CRLF or invalid `Documentation=` in an older unit). Re-run `sudo bash scripts/install-boot-service.sh` and `sudo systemctl daemon-reload` after pulling the repo (current units use `ExecStart=/usr/bin/bash …/kiosk-compose-up.sh` and a valid `Documentation=` URL).
 
 ## SSH recovery (panel blank / no Docker)
 

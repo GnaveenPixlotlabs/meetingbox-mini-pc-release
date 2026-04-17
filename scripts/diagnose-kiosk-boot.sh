@@ -44,7 +44,7 @@ ASU="/var/lib/AccountsService/users/$U"
 if [[ -f "$ASU" ]]; then
   grep -E '^XSession=' "$ASU" 2>/dev/null || echo "(no XSession= line — add XSession=meetingbox-kiosk)"
 else
-  echo "MISSING: $ASU — log in once on the panel as $U, then re-run install-gdm-kiosk-session.sh"
+  echo "MISSING: $ASU — re-run: sudo bash scripts/install-gdm-kiosk-session.sh (creates this file if absent)"
 fi
 echo ""
 

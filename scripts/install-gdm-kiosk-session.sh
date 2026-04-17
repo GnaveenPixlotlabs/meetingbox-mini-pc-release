@@ -82,7 +82,15 @@ if [[ -f "$ASU" ]]; then
   fi
   echo "Set default X session for $RUN_AS_USER to meetingbox-kiosk in $ASU"
 else
-  echo "WARNING: no $ASU — create user or log in once, then re-run or add XSession=meetingbox-kiosk manually."
+  # GDM uses AccountsService for default X session; the file is often missing until first GUI login.
+  mkdir -p "$(dirname "$ASU")"
+  cat >"$ASU" <<ASUEOF
+[User]
+XSession=meetingbox-kiosk
+SystemAccount=false
+ASUEOF
+  chmod 644 "$ASU"
+  echo "Created $ASU with XSession=meetingbox-kiosk (user had not logged in on the panel before)."
 fi
 
 # Pick up XSession= without requiring another reboot (GDM reads AccountsService at login).
