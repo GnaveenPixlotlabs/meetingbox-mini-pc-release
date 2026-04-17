@@ -25,11 +25,13 @@ fi
 APPLIANCE_DIR=$(cd "$APPLIANCE_DIR" && pwd)
 
 # apt cannot run in parallel; boot or unattended-upgrades often holds the lock.
+# Do not pgrep "unattended-upgrade" broadly — it matches unattended-upgrade-shutdown
+# (idle on many systems) and would block forever. A real upgrade uses apt-get/apt/dpkg
+# and/or holds the fuser-checked lock files.
 _apt_is_busy() {
   pgrep -x apt-get >/dev/null 2>&1 && return 0
   pgrep -x apt >/dev/null 2>&1 && return 0
   pgrep -x dpkg >/dev/null 2>&1 && return 0
-  pgrep -f unattended-upgrade >/dev/null 2>&1 && return 0
   if command -v fuser >/dev/null 2>&1; then
     local L
     for L in /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
@@ -50,7 +52,7 @@ wait_for_apt_idle() {
     if [[ "$t" -eq 0 ]]; then
       echo "Another apt/dpkg is running — waiting up to ${max}s for the lock to clear..."
     elif (( t % 30 == 0 )); then
-      echo "  ... still waiting (${t}s). Try: ps aux | grep -E 'apt-get|dpkg|unattended'"
+      echo "  ... still waiting (${t}s). Check: ps aux | grep -E 'apt-get|dpkg' (ignore unattended-upgrade-shutdown)"
     fi
     sleep 3
     t=$((t + 3))
