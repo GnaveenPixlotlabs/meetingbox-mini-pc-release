@@ -46,6 +46,21 @@ What this installs:
 
 Removing **all** branding needs a custom OEM image, not this repo alone.
 
+## Kiosk “not happening” (still Ubuntu desktop, or black screen forever)
+
+On the device (SSH is fine), collect a quick report:
+
+```bash
+cd ~/meetingbox-mini-pc-release
+bash scripts/diagnose-kiosk-boot.sh
+```
+
+Typical causes:
+
+- **Still on the Ubuntu session** — `XSession` must be `meetingbox-kiosk` and GDM must auto-login into that session (see script output). Re-run `sudo bash scripts/setup-infotainment-kiosk.sh` then reboot.
+- **`meetingbox` not in group `docker`** — kiosk session cannot run `docker compose`. `sudo usermod -aG docker meetingbox`, then log out completely or reboot.
+- **No containers** — ensure `.env` exists; if it has no `COMPOSE_PROFILES=`, current `kiosk-compose-up.sh` defaults to `mini-pc,docker-audio`. Check `journalctl -t meetingbox-kiosk-compose -b` and `docker ps -a`.
+
 ## SSH recovery (panel blank / no Docker)
 
 ```bash

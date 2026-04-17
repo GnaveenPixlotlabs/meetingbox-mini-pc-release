@@ -98,6 +98,11 @@ cd "$APPLIANCE_DIR"
 # MEETINGBOX_X11_COOKIE is NOT in .env — Compose always uses this file for the bind mount on boot.
 export MEETINGBOX_X11_COOKIE="$XAUTH_COPY"
 export DEVICE_UI_DISPLAY="$disp_num"
+# Services are gated by Compose profiles; if .env omits COMPOSE_PROFILES, plain ``up -d``
+# starts no device-ui/redis/audio. Default only when .env does not define the variable.
+if [[ ! -f "$APPLIANCE_DIR/.env" ]] || ! grep -qE '^[[:space:]]*COMPOSE_PROFILES=' "$APPLIANCE_DIR/.env"; then
+  export COMPOSE_PROFILES="${COMPOSE_PROFILES:-mini-pc,docker-audio}"
+fi
 # One shot only — do not ``--force-recreate device-ui`` here; that stops the UI right after
 # the first start and looks like “fullscreen then closes and opens again” on the panel.
 /usr/bin/docker compose up -d

@@ -85,6 +85,11 @@ else
   echo "WARNING: no $ASU — create user or log in once, then re-run or add XSession=meetingbox-kiosk manually."
 fi
 
+# Pick up XSession= without requiring another reboot (GDM reads AccountsService at login).
+if systemctl is-enabled accounts-daemon &>/dev/null; then
+  systemctl reload-or-restart accounts-daemon.service 2>/dev/null || true
+fi
+
 # GDM: skip Ubuntu greeter / session list — jump straight into meetingbox-kiosk X session.
 if [[ -f /etc/gdm3/custom.conf ]]; then
   bash "$MINI_PC_ROOT/scripts/patch-gdm-autologin-kiosk.sh" /etc/gdm3/custom.conf "$RUN_AS_USER"
