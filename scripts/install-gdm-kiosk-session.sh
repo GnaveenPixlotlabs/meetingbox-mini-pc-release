@@ -24,6 +24,42 @@ fi
 
 APPLIANCE_DIR=$(cd "$APPLIANCE_DIR" && pwd)
 
+# apt cannot run in parallel; boot or unattended-upgrades often holds the lock.
+_apt_is_busy() {
+  pgrep -x apt-get >/dev/null 2>&1 && return 0
+  pgrep -x apt >/dev/null 2>&1 && return 0
+  pgrep -x dpkg >/dev/null 2>&1 && return 0
+  pgrep -f unattended-upgrade >/dev/null 2>&1 && return 0
+  if command -v fuser >/dev/null 2>&1; then
+    local L
+    for L in /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+      [[ -e "$L" ]] || continue
+      fuser "$L" >/dev/null 2>&1 && return 0
+    done
+  fi
+  return 1
+}
+
+wait_for_apt_idle() {
+  local max="${1:-900}" t=0
+  while (( t < max )); do
+    if ! _apt_is_busy; then
+      [[ "$t" -eq 0 ]] || echo "apt is idle after ${t}s."
+      return 0
+    fi
+    if [[ "$t" -eq 0 ]]; then
+      echo "Another apt/dpkg is running — waiting up to ${max}s for the lock to clear..."
+    elif (( t % 30 == 0 )); then
+      echo "  ... still waiting (${t}s). Try: ps aux | grep -E 'apt-get|dpkg|unattended'"
+    fi
+    sleep 3
+    t=$((t + 3))
+  done
+  echo "Timed out waiting for apt. Finish the other update, then re-run this script." >&2
+  return 1
+}
+
+wait_for_apt_idle
 apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openbox x11-xserver-utils
 
