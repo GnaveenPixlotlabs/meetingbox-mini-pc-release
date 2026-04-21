@@ -14,6 +14,8 @@ This folder contains everything that normally runs on the **meeting room device*
 | `scripts/recovery-appliance-ssh.sh` | **SSH recovery** when Docker / UI stopped |
 | `scripts/setup-infotainment-kiosk.sh` | **One-shot** GDM kiosk + systemd boot stack |
 | `INFOTAINMENT.md` | Checklist: infotainment-style boot (no Ubuntu desktop) |
+| `SETUP_PANEL_TOUCH.md` | **Step-by-step:** DSI rotation + touch alignment (`panel-xrandr.env`) |
+| `scripts/diagnose-touch-panel.sh` | **Pasteable report** when touch/rotation still misbehaves |
 | `scripts/diagnose-kiosk-boot.sh` | On-device checks when kiosk / Docker “is not happening” |
 | `scripts/install-gdm-kiosk-session.sh` | GDM **direct** into kiosk session + `custom.conf` autologin |
 | `scripts/install-xinit-no-gdm.sh` | **Disable GDM** — tty1 `startx` → app only (advanced) |

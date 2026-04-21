@@ -75,6 +75,18 @@ _map_one() {
   return 1
 }
 
+# Pointer slave by numeric id (avoids duplicate device names mapping the wrong slave).
+_map_one_by_id() {
+  local id="$1"
+  [[ -z "$id" ]] && return 1
+  if xinput map-to-output "$id" "$OUT" 2>/dev/null; then
+    logger -t meetingbox-kiosk "xinput: map-to-output id=$id -> $OUT"
+    _touch_apply_matrix "$id"
+    return 0
+  fi
+  return 1
+}
+
 # Map touchscreen XInput devices to the same output as the panel (critical after --rotate).
 _map_touch_to_output() {
   if [[ "${MEETINGBOX_MAP_TOUCH_TO_OUTPUT:-1}" != "1" ]]; then
@@ -86,8 +98,15 @@ _map_touch_to_output() {
   }
   local devname mapped=0
 
-  # 1) Explicit device first (most reliable — get exact name from: xinput list --name-only)
-  if [[ -n "${MEETINGBOX_TOUCH_XINPUT_DEVICE:-}" ]]; then
+  # 0) Numeric id first (best when `xinput list` shows duplicate names — use pointer slave id, e.g. 15)
+  if [[ -n "${MEETINGBOX_TOUCH_XINPUT_ID:-}" ]] && [[ "${MEETINGBOX_TOUCH_XINPUT_ID}" =~ ^[0-9]+$ ]]; then
+    if _map_one_by_id "${MEETINGBOX_TOUCH_XINPUT_ID}"; then
+      mapped=1
+    fi
+  fi
+
+  # 1) Explicit device name (get exact name from: xinput list --name-only)
+  if [[ "$mapped" -eq 0 ]] && [[ -n "${MEETINGBOX_TOUCH_XINPUT_DEVICE:-}" ]]; then
     if _map_one "${MEETINGBOX_TOUCH_XINPUT_DEVICE}"; then
       mapped=1
     fi
