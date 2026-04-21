@@ -124,14 +124,28 @@ class _CanvasHeaderGlyph(Widget):
 
 
 class _HeroCheckCircle(Widget):
-    """Large green ring + white check (no font glyphs — works on kiosk fonts)."""
+    """Figma S-05 hero: faux-blur green glow + large light-green disc with a 4px
+    ring, and an inner solid green disc carrying the white check."""
 
     def __init__(self, size_px: int, **kwargs):
         kwargs.setdefault("size_hint", (None, None))
         kwargs.setdefault("size", (size_px, size_px))
         super().__init__(**kwargs)
+        # State controls the inner glyph (done=filled disc + check, active=spinner).
+        self._state = "done"
+        self._spin_angle = 0.0
         self.bind(pos=self._draw, size=self._draw)
         Clock.schedule_once(lambda *_: self._draw(), 0)
+
+    def set_state(self, state: str):
+        self._state = state if state in ("active", "done") else "done"
+        self._draw()
+
+    def set_spin_angle(self, angle: float):
+        if self._state != "active":
+            return
+        self._spin_angle = angle % 360.0
+        self._draw()
 
     def _draw(self, *_):
         self.canvas.clear()
@@ -139,53 +153,120 @@ class _HeroCheckCircle(Widget):
         r = min(self.width, self.height) / 2.0
         if r < 4:
             return
-        inset = max(2.0, r * 0.08)
         with self.canvas:
-            Color(34 / 255.0, 197 / 255.0, 94 / 255.0, 0.12)
+            # Faux blur glow — layered fading ellipses (~50px blur in Figma).
+            for i, (factor, alpha) in enumerate(((1.55, 0.06), (1.30, 0.10), (1.10, 0.16))):
+                gr = r * factor
+                Color(34 / 255.0, 197 / 255.0, 94 / 255.0, alpha)
+                Ellipse(pos=(cx - gr, cy - gr), size=(gr * 2, gr * 2))
+
+            # Outer light-green disc (Figma: rgba(34,197,94,0.1))
+            Color(34 / 255.0, 197 / 255.0, 94 / 255.0, 0.10)
             Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
-            Color(34 / 255.0, 197 / 255.0, 94 / 255.0, 0.35)
-            Line(circle=(cx, cy, max(1.0, r - inset)), width=max(2.0, r * 0.04))
-            Color(1, 1, 1, 1)
-            lw = max(2.5, r * 0.09)
-            x0, y0 = cx - r * 0.32, cy - r * 0.08
-            x1, y1 = cx - r * 0.06, cy - r * 0.34
-            x2, y2 = cx + r * 0.36, cy + r * 0.22
-            Line(points=[x0, y0, x1, y1, x2, y2], width=lw, cap="round", joint="round")
+
+            # 4px border ring (Figma: rgba(34,197,94,0.3))
+            border_w = max(2.0, r * 0.08)
+            Color(34 / 255.0, 197 / 255.0, 94 / 255.0, 0.30)
+            Line(circle=(cx, cy, r - border_w / 2.0), width=border_w)
+
+            # Inner disc (Figma inner 50px vs outer 128px → ratio ~0.39)
+            ir = r * 0.42
+            if self._state == "done":
+                Color(*_SUCCESS, 1.0)
+                Ellipse(pos=(cx - ir, cy - ir), size=(ir * 2, ir * 2))
+                # Large white check
+                Color(1, 1, 1, 1)
+                lw = max(2.5, ir * 0.22)
+                x0, y0 = cx - ir * 0.48, cy - ir * 0.04
+                x1, y1 = cx - ir * 0.10, cy - ir * 0.42
+                x2, y2 = cx + ir * 0.52, cy + ir * 0.34
+                Line(points=[x0, y0, x1, y1, x2, y2], width=lw, cap="round", joint="round")
+            else:
+                # Spinner while analysis is still running — matches the stage spinner.
+                Color(*_SUCCESS, 0.15)
+                Line(circle=(cx, cy, ir), width=max(2.0, ir * 0.14))
+                start = self._spin_angle
+                end = (self._spin_angle + 110.0) % 360.0
+                Color(*_SUCCESS, 1.0)
+                Line(
+                    circle=(cx, cy, ir, start, end),
+                    width=max(2.5, ir * 0.18),
+                    cap="round",
+                )
 
 
 class _StageMark(Widget):
-    """20dp stage icon: hollow (pending), ring (active), green check (done)."""
+    """Stage icon with three clearly distinct states.
+
+    - pending: muted hollow ring (no fill, no check)
+    - active: faint track ring + rotating green arc (animated spinner)
+    - done:   filled green disc + white check (Figma S-05)
+    """
 
     def __init__(self, **kwargs):
         kwargs.setdefault("size_hint", (None, None))
         kwargs.setdefault("size", (22, 22))
         super().__init__(**kwargs)
         self._state = "pending"
+        self._spin_angle = 0.0
         self.bind(pos=self._draw, size=self._draw)
 
     def set_state(self, state: str):
+        if state not in ("pending", "active", "done"):
+            state = "pending"
         self._state = state
         self._draw()
+
+    def set_spin_angle(self, angle: float):
+        # Only redraw while actively spinning; pending/done are static.
+        if self._state != "active":
+            return
+        self._spin_angle = angle % 360.0
+        self._draw()
+
+    def is_active(self) -> bool:
+        return self._state == "active"
 
     def _draw(self, *_):
         self.canvas.clear()
         cx, cy = self.center_x, self.center_y
-        r = min(self.width, self.height) * 0.38
+        r = min(self.width, self.height) * 0.46
         if r < 2:
             return
         with self.canvas:
             if self._state == "pending":
-                Color(*_MUTED)
-                Line(circle=(cx, cy, r), width=max(1.2, r * 0.12))
+                Color(*_MUTED, 0.55)
+                Line(circle=(cx, cy, r * 0.82), width=max(1.3, r * 0.12))
             elif self._state == "active":
-                Color(*_SUCCESS)
-                Line(circle=(cx, cy, r), width=max(1.5, r * 0.14))
+                # Track ring (muted)
+                Color(*_MUTED, 0.30)
+                Line(circle=(cx, cy, r * 0.82), width=max(1.4, r * 0.14))
+                # Rotating green arc (~110°)
+                start = self._spin_angle
+                end = (self._spin_angle + 110.0) % 360.0
+                Color(*_SUCCESS, 0.95)
+                Line(
+                    circle=(cx, cy, r * 0.82, start, end),
+                    width=max(1.6, r * 0.18),
+                    cap="round",
+                )
+                # Small dot at arc leading tip — extra affordance of "running"
+                lead_rad = math.radians(90.0 - end)
+                dx = cx + math.cos(lead_rad) * r * 0.82
+                dy = cy + math.sin(lead_rad) * r * 0.82
+                dot_r = max(1.4, r * 0.14)
+                Color(*_SUCCESS, 1.0)
+                Ellipse(pos=(dx - dot_r, dy - dot_r), size=(dot_r * 2, dot_r * 2))
             else:
-                Color(*_SUCCESS)
-                lw = max(2.0, r * 0.18)
-                x0, y0 = cx - r * 0.45, cy
-                x1, y1 = cx - r * 0.12, cy - r * 0.42
-                x2, y2 = cx + r * 0.5, cy + r * 0.38
+                # Filled green disc
+                Color(*_SUCCESS, 1.0)
+                Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
+                # White check
+                Color(1, 1, 1, 1)
+                lw = max(1.8, r * 0.22)
+                x0, y0 = cx - r * 0.42, cy - r * 0.04
+                x1, y1 = cx - r * 0.10, cy - r * 0.36
+                x2, y2 = cx + r * 0.44, cy + r * 0.28
                 Line(points=[x0, y0, x1, y1, x2, y2], width=lw, cap="round", joint="round")
 
 
@@ -291,6 +372,8 @@ class ProcessingScreen(BaseScreen):
         self._pulse_event = None
         self._pulse_alpha = 0.20
         self._pulse_dir = 1
+        self._spin_event = None
+        self._spin_angle = 0.0
         self._layout_fit = _compute_processing_layout_fit()
         self._build_ui()
 
@@ -572,6 +655,21 @@ class ProcessingScreen(BaseScreen):
             self._success_badge_bg = RoundedRectangle(
                 pos=(0, 0), size=self.success_badge.size, radius=[999]
             )
+        # Figma: inset 1px ring of rgba(34,197,94,0.2) around the pill.
+        with success_badge_wrap.canvas.after:
+            self._success_badge_border_col = Color(
+                34 / 255.0, 197 / 255.0, 94 / 255.0, 0.28
+            )
+            self._success_badge_border = Line(
+                rounded_rectangle=(
+                    0,
+                    0,
+                    self.success_badge.width,
+                    self.success_badge.height,
+                    min(self.success_badge.width, self.success_badge.height) / 2.0,
+                ),
+                width=1.1,
+            )
         success_badge_wrap.bind(
             pos=lambda w, *_: setattr(
                 self._success_badge_bg,
@@ -587,16 +685,39 @@ class ProcessingScreen(BaseScreen):
                 self.success_badge.size,
             ),
         )
+        def _sync_success_badge_border(*_a):
+            w = self.success_badge.width
+            h = self.success_badge.height
+            bx = success_badge_wrap.center_x - w / 2.0
+            by = success_badge_wrap.center_y - h / 2.0
+            self._success_badge_border.rounded_rectangle = (
+                bx,
+                by,
+                w,
+                h,
+                min(w, h) / 2.0,
+            )
+
         self.success_badge.bind(
-            size=lambda *_: setattr(self._success_badge_bg, "size", self.success_badge.size),
-            pos=lambda *_: setattr(
-                self._success_badge_bg,
-                "pos",
-                (
-                    success_badge_wrap.center_x - self.success_badge.width / 2,
-                    success_badge_wrap.center_y - self.success_badge.height / 2,
-                ),
+            size=lambda *_: (
+                setattr(self._success_badge_bg, "size", self.success_badge.size),
+                _sync_success_badge_border(),
             ),
+            pos=lambda *_: (
+                setattr(
+                    self._success_badge_bg,
+                    "pos",
+                    (
+                        success_badge_wrap.center_x - self.success_badge.width / 2,
+                        success_badge_wrap.center_y - self.success_badge.height / 2,
+                    ),
+                ),
+                _sync_success_badge_border(),
+            ),
+        )
+        success_badge_wrap.bind(
+            pos=lambda *_: _sync_success_badge_border(),
+            size=lambda *_: _sync_success_badge_border(),
         )
         success_badge_wrap.add_widget(self.success_badge)
         hero_col.add_widget(success_badge_wrap)
@@ -683,9 +804,36 @@ class ProcessingScreen(BaseScreen):
                 allow_stretch=True,
                 keep_ratio=True,
                 fit_mode="contain",
-                disabled=True,
                 opacity=0.60,
             )
+            # Soft drop shadow beneath the pill (Figma: 0 10 15 -3 rgba(74,143,217,0.2)).
+            with self.summary_btn.canvas.before:
+                self._cta_img_shadow_col = Color(
+                    74 / 255.0, 143 / 255.0, 217 / 255.0, 0.22 * self.summary_btn.opacity
+                )
+                self._cta_img_shadow = RoundedRectangle(
+                    pos=(self.summary_btn.x - self.ph(4), self.summary_btn.y - self.pv(8)),
+                    size=(self.summary_btn.width + self.ph(8), self.summary_btn.height),
+                    radius=[999],
+                )
+
+            def _sync_cta_img_shadow(*_a):
+                self._cta_img_shadow.pos = (
+                    self.summary_btn.x - self.ph(4),
+                    self.summary_btn.y - self.pv(8),
+                )
+                self._cta_img_shadow.size = (
+                    self.summary_btn.width + self.ph(8),
+                    self.summary_btn.height,
+                )
+
+            def _sync_cta_img_shadow_opacity(*_a):
+                self._cta_img_shadow_col.rgba = (
+                    74 / 255.0,
+                    143 / 255.0,
+                    217 / 255.0,
+                    0.22 * self.summary_btn.opacity,
+                )
 
             def _fit_summary_cta_texture(*_a):
                 tw, th = self.summary_btn.texture_size
@@ -695,8 +843,11 @@ class ProcessingScreen(BaseScreen):
                 ar = float(th) / float(tw)
                 h = int(round(float(wcap) * ar))
                 self.summary_btn.height = min(max(self.pv(48), h), self.pv(68))
+                _sync_cta_img_shadow()
 
             self.summary_btn.bind(texture_size=_fit_summary_cta_texture)
+            self.summary_btn.bind(pos=_sync_cta_img_shadow, size=_sync_cta_img_shadow)
+            self.summary_btn.bind(opacity=_sync_cta_img_shadow_opacity)
             self.summary_btn.bind(on_press=self._open_summary)
         else:
             self.summary_btn = Button(
@@ -709,7 +860,6 @@ class ProcessingScreen(BaseScreen):
                 background_normal="",
                 background_down="",
                 background_color=(0, 0, 0, 0),
-                disabled=True,
                 opacity=0.60,
             )
             with self.summary_btn.canvas.before:
@@ -834,10 +984,15 @@ class ProcessingScreen(BaseScreen):
         footer.add_widget(self.footer_right)
         root.add_widget(footer)
 
+        # Keep a handle to the hero check widget so we can swap its state between
+        # "spinner while working" and "filled check when done".
+        self._hero_check = check
+
         self.add_widget(root)
         self._set_stage(0, "active")
         self._set_stage(1, "pending")
         self._set_stage(2, "pending")
+        self._hero_check.set_state("active")
 
     def _set_stage(self, idx: int, state: str):
         row = (self.stage_1, self.stage_2, self.stage_3)[idx]
@@ -854,6 +1009,9 @@ class ProcessingScreen(BaseScreen):
                 self._set_stage(i, "active")
             else:
                 self._set_stage(i, "pending")
+        # Hero mirrors stage state — keep the animated ring until Ready is done.
+        if hasattr(self, "_hero_check") and self._hero_check is not None:
+            self._hero_check.set_state("done" if ready else "active")
 
     def _start_pulse(self):
         self._stop_pulse()
@@ -863,6 +1021,23 @@ class ProcessingScreen(BaseScreen):
         if self._pulse_event:
             self._pulse_event.cancel()
             self._pulse_event = None
+
+    def _start_spin(self):
+        self._stop_spin()
+        self._spin_event = Clock.schedule_interval(self._tick_spin, 1.0 / 30.0)
+
+    def _stop_spin(self):
+        if self._spin_event:
+            self._spin_event.cancel()
+            self._spin_event = None
+
+    def _tick_spin(self, dt):
+        self._spin_angle = (self._spin_angle + 360.0 * dt / 1.2) % 360.0
+        for row in (self.stage_1, self.stage_2, self.stage_3):
+            if row.mark.is_active():
+                row.mark.set_spin_angle(self._spin_angle)
+        if hasattr(self, "_hero_check") and self._hero_check is not None:
+            self._hero_check.set_spin_angle(self._spin_angle)
 
     def _tick_pulse(self, _dt):
         if self._summary_ready:
@@ -919,6 +1094,7 @@ class ProcessingScreen(BaseScreen):
         self._summary_ready = True
         self._set_stage_progress(2, ready=True)
         self._stop_pulse()
+        self._stop_spin()
         self.success_badge.opacity = 1.0
         self.title_label.text = "Analysis Complete!"
         self.subtitle_label.text = (
@@ -932,11 +1108,37 @@ class ProcessingScreen(BaseScreen):
         self.summary_btn.opacity = 1.0
 
     def _open_summary(self, _inst):
+        # Never fail silently. If the summary isn't ready yet, give the user
+        # visible feedback instead of a dead tap.
         if not self._summary_ready or not self._meeting_id:
+            logger.info(
+                "Summary CTA pressed but not ready (summary_ready=%s, meeting_id=%s)",
+                self._summary_ready,
+                self._meeting_id,
+            )
+            try:
+                self.footer_right.text = "Still processing — please wait…"
+            except Exception:
+                pass
+            # Bump opacity briefly so the tap is acknowledged.
+            try:
+                self.summary_btn.opacity = 0.35
+                Clock.schedule_once(
+                    lambda *_: setattr(self.summary_btn, "opacity", 0.60), 0.18
+                )
+            except Exception:
+                pass
             return
-        scr = self.app.screen_manager.get_screen("summary_review")
+        try:
+            scr = self.app.screen_manager.get_screen("summary_review")
+        except Exception as e:
+            logger.warning("summary_review screen missing: %s", e)
+            return
         if hasattr(scr, "set_meeting_data"):
-            scr.set_meeting_data(self._meeting_id, self._summary_data or {})
+            try:
+                scr.set_meeting_data(self._meeting_id, self._summary_data or {})
+            except Exception as e:
+                logger.warning("set_meeting_data failed: %s", e)
         self.goto("summary_review", transition="fade")
 
     def on_enter(self):
@@ -947,12 +1149,16 @@ class ProcessingScreen(BaseScreen):
         self.title_label.text = "Preparing Analysis..."
         self.subtitle_label.text = "Please wait while transcript and action items are prepared."
         self.footer_right.text = "Analysis in progress..."
-        self.summary_btn.disabled = True
+        # Keep button tappable so _open_summary can give feedback; only fade.
+        self.summary_btn.disabled = False
         self.summary_btn.opacity = 0.60
         self._set_stage_progress(0)
         self._pulse_alpha = 0.20
         self._pulse_dir = 1
+        self._spin_angle = 0.0
         self._start_pulse()
+        self._start_spin()
 
     def on_leave(self):
         self._stop_pulse()
+        self._stop_spin()
