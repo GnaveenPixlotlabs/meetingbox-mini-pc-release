@@ -379,6 +379,11 @@ class MeetingBoxApp(App):
         self.screen_manager = None
         self._nav_stack = []
 
+        # Summary-ready fallback poll state (used when the `summary_complete` WS
+        # event is missed while the processing screen is shown).
+        self._summary_poll_meeting_id = None
+        self._summary_poll_done = False
+
         # WebSocket
         self.ws_task = None
         self._pairing_poll = None
@@ -942,6 +947,12 @@ class MeetingBoxApp(App):
 
         Clock.schedule_once(_update_status, 0)
 
+        # Safety net: if `summary_complete` WS packet never arrives (network
+        # hiccup, WS disconnected during the window, server emit dropped), we
+        # still need to reveal the CTA. Start a bounded HTTP poll.
+        if meeting_id:
+            self._start_summary_poll(meeting_id)
+
     def on_summary_progress(self, data):
         def _update_status(_dt):
             screen = self.screen_manager.get_screen('processing')
@@ -996,6 +1007,10 @@ class MeetingBoxApp(App):
 
     def _show_processing_summary_ready(self, meeting_id: str, summary: dict):
         """Keep user on processing screen and enable CTA once summary is ready."""
+        # Any path reaching here is the authoritative "summary ready" signal —
+        # silence the fallback poll so we don't duplicate work.
+        if self._summary_poll_meeting_id == meeting_id:
+            self._summary_poll_done = True
         try:
             processing = self.screen_manager.get_screen('processing')
         except Exception as e:
@@ -1003,6 +1018,54 @@ class MeetingBoxApp(App):
             return
         if hasattr(processing, 'on_summary_ready'):
             processing.on_summary_ready(meeting_id, summary or {})
+
+    def _start_summary_poll(self, meeting_id: str):
+        """Kick off the HTTP fallback poll that watches for a saved summary.
+
+        Safe to call multiple times — new meeting_id replaces the previous one,
+        and _show_processing_summary_ready() flips the done flag regardless of
+        which path delivered the summary first.
+        """
+        if not meeting_id:
+            return
+        self._summary_poll_meeting_id = meeting_id
+        self._summary_poll_done = False
+        run_async(self._poll_summary_until_ready(meeting_id))
+
+    async def _poll_summary_until_ready(self, meeting_id: str):
+        """Poll GET /api/meetings/{id} every 5s for up to ~5 minutes. If a
+        summary appears, deliver it via _show_processing_summary_ready."""
+        logger.info("Summary poll starting for meeting %s", meeting_id)
+        for attempt in range(60):  # 60 * 5s = 5 minutes
+            if self._summary_poll_done or self._summary_poll_meeting_id != meeting_id:
+                return
+            await asyncio.sleep(5.0)
+            if self._summary_poll_done or self._summary_poll_meeting_id != meeting_id:
+                return
+            try:
+                detail = await self.backend.get_meeting_detail(meeting_id)
+            except Exception as e:
+                logger.debug(
+                    "Summary poll attempt %d failed for %s: %s",
+                    attempt + 1, meeting_id, e,
+                )
+                continue
+            summary = (detail or {}).get('summary') or {}
+            if summary:
+                logger.info(
+                    "Summary poll found summary for %s after %d attempt(s)",
+                    meeting_id, attempt + 1,
+                )
+                Clock.schedule_once(
+                    lambda _dt, _mid=meeting_id, _s=summary:
+                        self._show_processing_summary_ready(_mid, _s),
+                    0,
+                )
+                return
+        logger.warning(
+            "Summary poll gave up for meeting %s (no summary within 5 min)",
+            meeting_id,
+        )
 
     def _auto_summarize(self, meeting_id: str):
         """After transcription completes, auto-trigger summarization then show review screen."""
