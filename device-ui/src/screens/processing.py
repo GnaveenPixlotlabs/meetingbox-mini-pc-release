@@ -1149,9 +1149,10 @@ class ProcessingScreen(BaseScreen):
         self.title_label.text = "Preparing Analysis..."
         self.subtitle_label.text = "Please wait while transcript and action items are prepared."
         self.footer_right.text = "Analysis in progress..."
-        # Keep button tappable so _open_summary can give feedback; only fade.
-        self.summary_btn.disabled = False
-        self.summary_btn.opacity = 0.60
+        # Hide the CTA entirely until analysis is fully complete. The vertical
+        # space stays reserved so the reveal doesn't shift the layout.
+        self.summary_btn.disabled = True
+        self.summary_btn.opacity = 0.0
         self._set_stage_progress(0)
         self._pulse_alpha = 0.20
         self._pulse_dir = 1
