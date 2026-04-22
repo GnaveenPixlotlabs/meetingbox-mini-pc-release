@@ -94,6 +94,10 @@ services:
       - FULLSCREEN=${FULLSCREEN:-1}
       # 1 = show mouse pointer in fullscreen (USB mouse / trackball). Default 0 = pointer hidden (touch-only).
       - SHOW_MOUSE_CURSOR=${SHOW_MOUSE_CURSOR:-0}
+      # Real LAN (e.g. 192.168.1.14 on enp1s0). In Docker, auto-detect is often
+      # the bridge (172.18.x); set this on the host or use data/config/lan_ip — see .env.example.
+      - MEETINGBOX_LAN_IP=${MEETINGBOX_LAN_IP:-}
+      - MEETINGBOX_LAN_IP_FILE=${MEETINGBOX_LAN_IP_FILE:-/data/config/lan_ip}
       - MOCK_BACKEND=${MOCK_BACKEND:-0}
       - AUDIO_INPUT_DEVICE_INDEX=${AUDIO_INPUT_DEVICE_INDEX:-}
       - AUDIO_INPUT_DEVICE_NAME=${AUDIO_INPUT_DEVICE_NAME:-}

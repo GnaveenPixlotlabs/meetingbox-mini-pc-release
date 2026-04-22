@@ -47,6 +47,7 @@ RUN set -eux; \
             xauth \
             x11-xserver-utils \
             util-linux \
+            iproute2 \
             network-manager \
             sudo \
         ; then \
