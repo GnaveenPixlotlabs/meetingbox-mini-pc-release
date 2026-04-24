@@ -2,7 +2,8 @@
 Local wake-word voice control for the device UI.
 
 Listens for a configurable wake phrase (default: "hey tony"), then accepts
-simple follow-up voice commands such as "start meeting".
+follow-up commands covering meetings, navigation, device controls, and a small
+confirmation flow for destructive actions.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import shutil
 import threading
 import time
 import zipfile
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -45,6 +47,21 @@ if SetLogLevel is not None:
         pass
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+
+@dataclass(frozen=True)
+class VoiceIntent:
+    name: str
+    value: str | None = None
+    phrase: str = ""
+
+
+@dataclass(frozen=True)
+class _IntentSpec:
+    name: str
+    phrases: tuple[str, ...]
+    value: str | None = None
+    threshold: float = 0.78
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -98,8 +115,80 @@ def _best_phrase_similarity(text: str, target: str) -> float:
     )
 
 
+def _build_intent_specs(start_commands: list[str]) -> tuple[_IntentSpec, ...]:
+    start_aliases = tuple(
+        dict.fromkeys(
+            [
+                *(_normalize_text(cmd) for cmd in start_commands if _normalize_text(cmd)),
+                "start the meeting",
+                "start recording",
+                "begin meeting",
+                "begin recording",
+            ]
+        )
+    )
+    return (
+        _IntentSpec("start_meeting", start_aliases),
+        _IntentSpec("stop_meeting", ("stop meeting", "end meeting", "stop recording", "finish meeting")),
+        _IntentSpec("pause_meeting", ("pause meeting", "pause recording", "hold recording")),
+        _IntentSpec("resume_meeting", ("resume meeting", "resume recording", "continue meeting")),
+        _IntentSpec("recording_status", ("are we recording", "recording status", "what is the meeting status")),
+        _IntentSpec("recording_elapsed", ("how long have we been recording", "recording duration", "meeting duration")),
+        _IntentSpec("go_home", ("go home", "open home", "show home screen")),
+        _IntentSpec("open_settings", ("open settings", "show settings")),
+        _IntentSpec("show_meetings", ("show meetings", "open meetings", "show recent meetings")),
+        _IntentSpec("show_last_meeting", ("show last meeting", "open last meeting", "last meeting")),
+        _IntentSpec("summarize_last_meeting", ("summarize last meeting", "read last meeting summary", "what was the last meeting about")),
+        _IntentSpec("read_action_items", ("read action items", "read my action items", "what are my action items")),
+        _IntentSpec("test_microphone", ("test microphone", "test mic", "microphone test", "check microphone")),
+        _IntentSpec("what_time", ("what time is it", "tell me the time", "current time")),
+        _IntentSpec("wifi_status", ("wifi status", "network status", "internet status", "show ip address")),
+        _IntentSpec("storage_left", ("storage left", "how much storage is left", "storage status")),
+        _IntentSpec("version_status", ("what version are you on", "firmware version", "system version")),
+        _IntentSpec("next_calendar", ("what s next on the calendar", "what is next on the calendar", "next meeting", "calendar status")),
+        _IntentSpec("system_status", ("system health", "is everything working", "device status")),
+        _IntentSpec("privacy_mode", ("turn privacy mode on", "privacy mode on", "enable privacy mode"), value="on"),
+        _IntentSpec("privacy_mode", ("turn privacy mode off", "privacy mode off", "disable privacy mode"), value="off"),
+        _IntentSpec("brightness", ("brightness low", "set brightness to low", "screen brightness low"), value="low"),
+        _IntentSpec("brightness", ("brightness medium", "set brightness to medium", "screen brightness medium"), value="medium"),
+        _IntentSpec("brightness", ("brightness high", "set brightness to high", "screen brightness high"), value="high"),
+        _IntentSpec("screen_off", ("turn screen off", "screen off", "lock screen", "sleep screen")),
+        _IntentSpec("wake_screen", ("wake screen", "turn screen on", "screen on", "wake up screen")),
+        _IntentSpec("disconnect_wifi", ("disconnect wifi", "turn wifi off", "leave wifi")),
+        _IntentSpec("pair_device", ("pair device", "open pairing", "pair this device")),
+        _IntentSpec("restart_device", ("restart device", "reboot device", "restart meetingbox")),
+        _IntentSpec("power_off", ("shut down device", "shutdown device", "power off device", "turn off device")),
+        _IntentSpec("unpair_device", ("unpair device", "disconnect device", "unlink device")),
+        _IntentSpec("delete_this_meeting", ("delete this meeting", "remove this meeting")),
+        _IntentSpec("delete_old_meetings", ("delete old meetings", "delete all meetings", "clear meetings")),
+        _IntentSpec("factory_reset", ("factory reset", "reset device", "wipe device")),
+        _IntentSpec("help", ("help", "what can you do", "list commands", "show commands")),
+        _IntentSpec("unsupported", ("volume up", "increase volume", "speaker louder"), value="volume_up"),
+        _IntentSpec("unsupported", ("volume down", "decrease volume", "speaker quieter"), value="volume_down"),
+        _IntentSpec("unsupported", ("mute speaker", "mute volume", "mute audio"), value="mute"),
+        _IntentSpec("unsupported", ("unmute speaker", "unmute volume", "restore audio"), value="unmute"),
+        _IntentSpec("unsupported", ("speaker test", "test speaker", "play speaker test"), value="speaker_test"),
+        _IntentSpec("unsupported", ("cpu temperature", "temperature status"), value="cpu_temperature"),
+    )
+
+
 class VoiceCommandInterpreter:
-    """Small state machine for wake phrase + follow-up command recognition."""
+    """State machine for wake phrase, multi-intent parsing, and confirmation replies."""
+
+    _CONFIRM_PHRASES = (
+        "confirm",
+        "yes",
+        "yes do it",
+        "do it",
+        "go ahead",
+    )
+    _CANCEL_PHRASES = (
+        "cancel",
+        "never mind",
+        "stop",
+        "dont do that",
+        "do not do that",
+    )
 
     def __init__(
         self,
@@ -107,56 +196,103 @@ class VoiceCommandInterpreter:
         start_commands: list[str],
         command_timeout_seconds: float = 6.0,
         action_cooldown_seconds: float = 8.0,
+        confirmation_timeout_seconds: float = 8.0,
     ):
         self.wake_phrase = _normalize_text(wake_phrase)
-        self.start_commands = [_normalize_text(cmd) for cmd in start_commands if _normalize_text(cmd)]
         self.command_timeout_seconds = max(1.0, command_timeout_seconds)
-        self.action_cooldown_seconds = max(1.0, action_cooldown_seconds)
+        self.action_cooldown_seconds = max(0.5, action_cooldown_seconds)
+        self.confirmation_timeout_seconds = max(2.0, confirmation_timeout_seconds)
+        self._intent_specs = _build_intent_specs(start_commands)
         self._awaiting_command_until = 0.0
+        self._awaiting_confirmation_until = 0.0
         self._last_action_at = 0.0
+
+    @property
+    def awaiting_confirmation(self) -> bool:
+        return time.monotonic() <= self._awaiting_confirmation_until
 
     def reset(self) -> None:
         self._awaiting_command_until = 0.0
 
+    def begin_confirmation(self, now: float | None = None) -> None:
+        now = time.monotonic() if now is None else now
+        self._awaiting_confirmation_until = now + self.confirmation_timeout_seconds
+
+    def clear_confirmation(self) -> None:
+        self._awaiting_confirmation_until = 0.0
+
     def _heard_wake_phrase(self, text: str) -> bool:
         return _best_phrase_similarity(text, self.wake_phrase) >= 0.72
 
-    def _heard_start_command(self, text: str) -> bool:
-        return any(_best_phrase_similarity(text, cmd) >= 0.78 for cmd in self.start_commands)
+    def _matches_any(self, text: str, phrases: tuple[str, ...], threshold: float = 0.76) -> bool:
+        return any(_best_phrase_similarity(text, phrase) >= threshold for phrase in phrases)
 
     def heard_wake_phrase(self, text: str) -> bool:
         return self._heard_wake_phrase(_normalize_text(text))
 
     def heard_start_command(self, text: str) -> bool:
-        return self._heard_start_command(_normalize_text(text))
+        norm = _normalize_text(text)
+        return any(
+            spec.name == "start_meeting"
+            and any(_best_phrase_similarity(norm, phrase) >= spec.threshold for phrase in spec.phrases)
+            for spec in self._intent_specs
+        )
 
-    def handle_transcript(self, text: str, now: float | None = None) -> str | None:
+    def _detect_intent(self, text: str) -> VoiceIntent | None:
+        best: tuple[float, VoiceIntent] | None = None
+        for spec in self._intent_specs:
+            score = max((_best_phrase_similarity(text, phrase) for phrase in spec.phrases), default=0.0)
+            if score < spec.threshold:
+                continue
+            candidate = VoiceIntent(spec.name, value=spec.value, phrase=text)
+            if best is None or score > best[0]:
+                best = (score, candidate)
+        return best[1] if best else None
+
+    def detect_intent(self, text: str) -> VoiceIntent | None:
+        return self._detect_intent(_normalize_text(text))
+
+    def handle_transcript(self, text: str, now: float | None = None) -> VoiceIntent | None:
         now = time.monotonic() if now is None else now
         norm = _normalize_text(text)
         if not norm:
             if now > self._awaiting_command_until:
                 self.reset()
+            if now > self._awaiting_confirmation_until:
+                self.clear_confirmation()
             return None
+
+        if now <= self._awaiting_confirmation_until:
+            if self._matches_any(norm, self._CONFIRM_PHRASES):
+                self.clear_confirmation()
+                self._last_action_at = now
+                return VoiceIntent("confirm", phrase=norm)
+            if self._matches_any(norm, self._CANCEL_PHRASES):
+                self.clear_confirmation()
+                self._last_action_at = now
+                return VoiceIntent("cancel", phrase=norm)
+        elif now > self._awaiting_confirmation_until:
+            self.clear_confirmation()
 
         if now - self._last_action_at < self.action_cooldown_seconds:
             return None
 
+        intent = self._detect_intent(norm)
         heard_wake = self._heard_wake_phrase(norm)
-        heard_start = self._heard_start_command(norm)
 
-        if heard_wake and heard_start:
+        if heard_wake and intent is not None:
             self.reset()
             self._last_action_at = now
-            return "start_meeting"
+            return intent
 
         if heard_wake:
             self._awaiting_command_until = now + self.command_timeout_seconds
             return None
 
-        if heard_start and now <= self._awaiting_command_until:
+        if intent is not None and now <= self._awaiting_command_until:
             self.reset()
             self._last_action_at = now
-            return "start_meeting"
+            return intent
 
         if now > self._awaiting_command_until:
             self.reset()
@@ -164,29 +300,28 @@ class VoiceCommandInterpreter:
 
 
 class VoiceAssistant:
-    """
-    Background speech listener backed by Vosk + sounddevice.
-
-    The assistant only exposes a single action for now: start the current
-    meeting recording.
-    """
+    """Background speech listener backed by Vosk + sounddevice."""
 
     def __init__(
         self,
-        on_start_meeting: Callable[[], None],
+        on_intent: Callable[[VoiceIntent], None],
         on_wake_phrase: Callable[[str], None] | None = None,
     ):
-        self._on_start_meeting = on_start_meeting
+        self._on_intent = on_intent
         self._on_wake_phrase = on_wake_phrase
         self.enabled = _env_flag("VOICE_ASSISTANT_ENABLED", True)
         self.wake_phrase = (os.getenv("VOICE_ASSISTANT_WAKE_PHRASE") or "hey tony").strip() or "hey tony"
         self.start_commands = [
             cmd.strip()
-            for cmd in (os.getenv("VOICE_ASSISTANT_START_COMMANDS") or "start meeting,start the meeting,start recording").split(",")
+            for cmd in (
+                os.getenv("VOICE_ASSISTANT_START_COMMANDS")
+                or "start meeting,start the meeting,start recording"
+            ).split(",")
             if cmd.strip()
         ]
         self.command_timeout_seconds = _env_float("VOICE_ASSISTANT_COMMAND_TIMEOUT", 6.0)
-        self.action_cooldown_seconds = _env_float("VOICE_ASSISTANT_ACTION_COOLDOWN", 8.0)
+        self.action_cooldown_seconds = _env_float("VOICE_ASSISTANT_ACTION_COOLDOWN", 2.0)
+        self.confirmation_timeout_seconds = _env_float("VOICE_ASSISTANT_CONFIRMATION_TIMEOUT", 8.0)
         self.model_name = (
             os.getenv("VOICE_ASSISTANT_MODEL_NAME") or "vosk-model-small-en-us-0.15"
         ).strip() or "vosk-model-small-en-us-0.15"
@@ -205,6 +340,7 @@ class VoiceAssistant:
             start_commands=self.start_commands,
             command_timeout_seconds=self.command_timeout_seconds,
             action_cooldown_seconds=self.action_cooldown_seconds,
+            confirmation_timeout_seconds=self.confirmation_timeout_seconds,
         )
         self._audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=32)
         self._stop_event = threading.Event()
@@ -221,6 +357,10 @@ class VoiceAssistant:
     @property
     def available(self) -> bool:
         return self.enabled and sd is not None and Model is not None and KaldiRecognizer is not None
+
+    @property
+    def awaiting_confirmation(self) -> bool:
+        return self._interpreter.awaiting_confirmation
 
     def start(self) -> bool:
         if not self._can_run():
@@ -254,6 +394,12 @@ class VoiceAssistant:
             self._clear_audio_queue()
         else:
             logger.info("Voice assistant listening")
+
+    def begin_confirmation(self) -> None:
+        self._interpreter.begin_confirmation()
+
+    def clear_confirmation(self) -> None:
+        self._interpreter.clear_confirmation()
 
     def _can_run(self) -> bool:
         if not self.enabled:
@@ -306,19 +452,20 @@ class VoiceAssistant:
         if (
             self._on_wake_phrase is not None
             and self._interpreter.heard_wake_phrase(norm)
-            and not self._interpreter.heard_start_command(norm)
+            and self._interpreter.detect_intent(norm) is None
         ):
             try:
                 self._on_wake_phrase(norm)
             except Exception:
                 logger.exception("Voice assistant wake callback failed")
-        action = self._interpreter.handle_transcript(norm)
-        if action == "start_meeting":
-            logger.info('Voice command accepted: "%s" -> start meeting', norm)
-            try:
-                self._on_start_meeting()
-            except Exception:
-                logger.exception("Voice assistant callback failed")
+        intent = self._interpreter.handle_transcript(norm)
+        if intent is None:
+            return
+        logger.info('Voice command accepted: "%s" -> %s', norm, intent.name)
+        try:
+            self._on_intent(intent)
+        except Exception:
+            logger.exception("Voice assistant callback failed")
 
     def _resolve_input_device(self):
         idx_s = (AUDIO_INPUT_DEVICE_INDEX or "").strip()
