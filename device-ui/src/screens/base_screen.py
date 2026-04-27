@@ -164,7 +164,7 @@ class BaseScreen(Screen):
         ip = (local_ip or "").strip() if local_ip is not None else ""
         if ip in ("", "—"):
             ip = ""
-        ip_seg = f"   IP: {ip}" if ip else ""
+        ip_seg = f"   enp1s0: {ip}" if ip else ""
 
         if privacy_mode:
             self._footer_left.text = (

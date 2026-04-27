@@ -195,6 +195,14 @@ def _best_on_physical_lan_first(rows: List[Tuple[str, str, str]]) -> str | None:
     combined heuristic on all interfaces.
     """
     for require_up in (True, False):
+        for ifname, state, ip in rows:
+            if ifname != "enp1s0" or _iface_skip(ifname):
+                continue
+            stu = (state or "").upper()
+            if require_up and stu not in ("UP", "UNKNOWN"):
+                continue
+            if _lan_preference_score(ip) is not None:
+                return ip
         pruned: list[tuple[str, str, str]] = []
         for ifname, state, ip in rows:
             if not _iface_is_physical_or_wifi(ifname) or _iface_skip(ifname):
