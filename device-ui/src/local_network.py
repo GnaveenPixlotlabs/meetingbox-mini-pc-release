@@ -140,6 +140,22 @@ def _iface_skip(name: str) -> bool:
     return False
 
 
+def _looks_like_classic_docker_ipv4(ipv4: str) -> bool:
+    """True for default ``docker0`` (172.17/16) and typical compose bridges (172.18/16).
+
+    Those are the host/container side of Docker NAT, not the LAN IP peers use
+    to reach the mini PC on Ethernet/Wi‑Fi.
+    """
+    try:
+        ip = ipaddress.IPv4Address(ipv4)
+    except (ipaddress.AddressValueError, ValueError):
+        return False
+    if int(ip) >> 24 != 172:
+        return False
+    b = (int(ip) >> 16) & 0xFF
+    return b in (17, 18)
+
+
 def _parse_ip_br_text(text: str) -> List[Tuple[str, str, str]]:
     """Return list of (ifname, state, ip_without_cidr) from ``ip -4 -br addr`` output."""
     rows: list[tuple[str, str, str]] = []
@@ -218,6 +234,70 @@ def _best_on_physical_lan_first(rows: List[Tuple[str, str, str]]) -> str | None:
     return None
 
 
+def _host_lan_src_via_nsenter_route() -> str | None:
+    """IPv4 ``src`` from ``ip route get 8.8.8.8`` in the host netns (real outbound LAN)."""
+    ns = shutil.which("nsenter")
+    ipbin = shutil.which("ip")
+    if not ns or not ipbin:
+        return None
+    try:
+        p = subprocess.run(
+            [ns, "-t", "1", "-n", "--", ipbin, "route", "get", "8.8.8.8"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+            check=False,
+        )
+        if p.returncode != 0:
+            logger.debug(
+                "nsenter ip route get rc=%s stderr=%s", p.returncode, p.stderr
+            )
+            return None
+        m = re.search(
+            r"\bsrc\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b",
+            p.stdout or "",
+        )
+        if not m:
+            return None
+        cand = m.group(1)
+        if cand.startswith("127."):
+            return None
+        if _lan_preference_score(cand) is None:
+            return None
+        return cand
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        logger.debug("nsenter ip route get failed: %s", e)
+        return None
+
+
+def _nsenter_ip_addr_on_dev(dev: str) -> str | None:
+    """First global IPv4 on *dev* in the host netns (``ip -4 addr show dev enp1s0``)."""
+    ns = shutil.which("nsenter")
+    ipbin = shutil.which("ip")
+    if not ns or not ipbin or not dev:
+        return None
+    try:
+        p = subprocess.run(
+            [ns, "-t", "1", "-n", "--", ipbin, "-4", "addr", "show", "dev", dev],
+            capture_output=True,
+            text=True,
+            timeout=4,
+            check=False,
+        )
+        if p.returncode != 0:
+            return None
+        for m in _INET.finditer(p.stdout or ""):
+            addr = m.group(1)
+            if addr.startswith("127."):
+                continue
+            if _lan_preference_score(addr) is not None:
+                return addr
+        return None
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        logger.debug("nsenter ip addr show dev %s failed: %s", dev, e)
+        return None
+
+
 def _host_lan_from_nsenter() -> str | None:
     """
     True host addresses when the app runs in Docker with ``pid: host`` and
@@ -229,9 +309,35 @@ def _host_lan_from_nsenter() -> str | None:
     ipbin = shutil.which("ip")
     if not ipbin:
         return None
+
+    # Outbound route source — matches ``192.168.x`` on enp1s0 when the host has Internet.
+    route_ip = _host_lan_src_via_nsenter_route()
+    if route_ip and not _looks_like_classic_docker_ipv4(route_ip):
+        return route_ip
+
+    # Explicit NICs common on mini PCs (avoids ``ip -br`` parse edge cases).
+    for dev in ("enp1s0", "eno1", "enp0s31f6", "eth0"):
+        got = _nsenter_ip_addr_on_dev(dev)
+        if got and not _looks_like_classic_docker_ipv4(got):
+            return got
+
     for args in (
-        (ns, "-t", "1", "-n", ipbin, "-4", "-br", "addr", "show", "up"),
-        (ns, "-t", "1", "-n", ipbin, "-4", "-br", "addr", "show", "up", "scope", "global"),
+        (ns, "-t", "1", "-n", "--", ipbin, "-4", "-br", "addr", "show", "up"),
+        (
+            ns,
+            "-t",
+            "1",
+            "-n",
+            "--",
+            ipbin,
+            "-4",
+            "-br",
+            "addr",
+            "show",
+            "up",
+            "scope",
+            "global",
+        ),
     ):
         try:
             p = subprocess.run(
@@ -247,11 +353,11 @@ def _host_lan_from_nsenter() -> str | None:
             rows = _parse_ip_br_text(p.stdout or "")
             # 1) Real LAN (enp*/wlp*/usb*) with 192.168.x / 10.x before any VPN 172.16 on tun0.
             phys = _best_on_physical_lan_first(rows)
-            if phys:
+            if phys and not _looks_like_classic_docker_ipv4(phys):
                 return phys
             # 2) All non-loopback, skipping docker/veth/tun/…
             best = _best_ip_from_rows(rows)
-            if best:
+            if best and not _looks_like_classic_docker_ipv4(best):
                 return best
         except (OSError, subprocess.SubprocessError, ValueError) as e:
             logger.debug("nsenter ip failed: %s", e)
@@ -433,6 +539,8 @@ def get_primary_ipv4() -> str:
 
     best: tuple[int, str] | None = None
     for c in _candidates():
+        if _looks_like_classic_docker_ipv4(c):
+            continue
         sc = _lan_preference_score(c)
         if sc is None:
             continue
