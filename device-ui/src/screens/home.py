@@ -16,7 +16,7 @@ from kivy.uix.widget import Widget
 
 from async_helper import run_async
 from components.button import PrimaryButton
-from local_network import get_hostname_i_first_ipv4
+from local_network import get_primary_ipv4
 from config import (
     ASSETS_DIR,
     COLORS,
@@ -511,7 +511,7 @@ class HomeScreen(BaseScreen):
             free_gb=kw["free_gb"],
             privacy_mode=kw["privacy_mode"],
             wired_lan_ok=kw["wired_lan_ok"],
-            local_ip=get_hostname_i_first_ipv4(),
+            local_ip=get_primary_ipv4(),
         )
 
     def _on_start_recording(self, _inst):
@@ -558,7 +558,7 @@ class HomeScreen(BaseScreen):
                         free_gb=free_gb,
                         privacy_mode=privacy,
                         wired_lan_ok=wired_ok,
-                        local_ip=get_hostname_i_first_ipv4(),
+                        local_ip=get_primary_ipv4(),
                     )
 
                 Clock.schedule_once(_apply, 0)
