@@ -24,6 +24,32 @@ MEETINGBOX_PANEL_ROTATE=right
 MEETINGBOX_MAP_TOUCH_TO_OUTPUT=1
 ```
 
+**A2.** If the panel must use **rotate left** (90° CCW), set the **same** rotation for the **touch matrix** — add **`MEETINGBOX_TOUCH_MATRIX_PRESET=left`** (or the explicit matrix below). Example:
+
+```bash
+MEETINGBOX_PANEL_OUTPUT=DSI-1
+MEETINGBOX_PANEL_MODE=800x1280
+MEETINGBOX_PANEL_ROTATE=left
+MEETINGBOX_MAP_TOUCH_TO_OUTPUT=1
+MEETINGBOX_TOUCH_MATRIX_PRESET=left
+```
+
+Equivalent to the preset `left` (nine numbers):
+
+```bash
+MEETINGBOX_TOUCH_COORD_MATRIX="0 -1 1 1 0 0 0 0 1"
+```
+
+**A3.** If the **whole UI is upside down** (180°, top and bottom swapped), use **`inverted`** for both the panel and touch:
+
+```bash
+MEETINGBOX_PANEL_ROTATE=inverted
+MEETINGBOX_TOUCH_MATRIX_PRESET=inverted
+```
+
+(Or only the matrix: `MEETINGBOX_TOUCH_COORD_MATRIX="-1 0 1 0 -1 1 0 0 1"`.)  
+If it was only “sideways”, try **`left`** or **`right`** instead — not **`inverted`**.
+
 **B.** Touch: use **numeric id** if you have Goodix twice (pointer vs keyboard). Run:
 
 ```bash
@@ -109,19 +135,32 @@ Edit the panel file again:
 sudo nano /etc/meetingbox/panel-xrandr.env
 ```
 
-Add **one** of these (try after Step 6). **Always quote values with spaces.**
+Add **one** of these (try after Step 6). **Always quote values with spaces.**  
+The touch preset must **match** `MEETINGBOX_PANEL_ROTATE`: **`right`** with `rotate right`, **`left`** with `rotate left`.
 
 ```bash
 MEETINGBOX_TOUCH_MATRIX_PRESET=right
 ```
 
-Or nine explicit numbers (quotes are **required**):
+Or for **rotate left** panels:
+
+```bash
+MEETINGBOX_TOUCH_MATRIX_PRESET=left
+```
+
+Or nine explicit numbers (quotes are **required**). **Right** (same as preset `right`):
 
 ```bash
 MEETINGBOX_TOUCH_COORD_MATRIX="0 1 0 -1 0 1 0 0 1"
 ```
 
-Save and reboot. If it gets **worse**, change `right` to `left`, or **delete** the line and reboot again.
+**Left** (same as preset `left`):
+
+```bash
+MEETINGBOX_TOUCH_COORD_MATRIX="0 -1 1 1 0 0 0 0 1"
+```
+
+Save and reboot. If it gets **worse**, swap `right` ↔ `left`, or **delete** the matrix line and reboot again.
 
 **If the matrix “does not apply”**, common causes are:
 
@@ -175,3 +214,52 @@ xinput test 15
 | ☐ | Optional: `MEETINGBOX_TOUCH_MATRIX_PRESET=right` |
 
 More detail: **`INFOTAINMENT.md`**, template: **`kiosk-desktop/panel-xrandr.env.example`**.
+
+---
+
+## Rotation not applying (picture stays wrong / `xrandr` never sticks)
+
+1. **Confirm the helper runs and log the error** (on the mini PC, after login):
+
+   ```bash
+   journalctl -t meetingbox-kiosk -b --no-pager | tail -50
+   ```
+
+   You should see either `xrandr ok: ...` or lines like `xrandr failed ...` plus a dump of `xrandr` output.
+
+2. **Wrong output name** — On the **built-in screen** terminal (`DISPLAY=:0`):
+
+   ```bash
+   xrandr
+   ```
+
+   Use the **exact** connected output name in `panel-xrandr.env` (e.g. `HDMI-1`, `eDP-1`, `DSI-1`). Or set:
+
+   ```bash
+   MEETINGBOX_PANEL_OUTPUT=auto
+   ```
+
+   so the script picks the first **connected** line from `xrandr`.
+
+3. **Wrong mode** — If `--mode 800x1280` fails, the script falls back to **rotate-only** and **`--auto --rotate`**. If all fail, set **`MEETINGBOX_PANEL_MODE`** to a mode that appears in `xrandr` for that output (or leave mode wrong and rely on `--auto` after script update).
+
+4. **Disabled in config** — Ensure you do **not** have:
+
+   ```bash
+   MEETINGBOX_SKIP_PANEL_XRANDR=1
+   ```
+
+5. **Early X / GDM** — The script **retries** `xrandr` (default 30 attempts, 1 s apart). If the panel is very slow, add to `panel-xrandr.env`:
+
+   ```bash
+   MEETINGBOX_XRANDR_ATTEMPTS=60
+   MEETINGBOX_XRANDR_RETRY_DELAY=1
+   ```
+
+6. **Refresh the installed script** after `git pull`:
+
+   ```bash
+   sudo install -m 0755 ~/meetingbox-mini-pc-release/scripts/apply-kiosk-display-orientation.sh /usr/local/bin/meetingbox-apply-kiosk-display-orientation
+   ```
+
+   Then reboot.

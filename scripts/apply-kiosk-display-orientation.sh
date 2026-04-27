@@ -26,20 +26,62 @@ OUT="${MEETINGBOX_PANEL_OUTPUT:-DSI-1}"
 MODE="${MEETINGBOX_PANEL_MODE:-800x1280}"
 ROT="${MEETINGBOX_PANEL_ROTATE:-right}"
 
+# Try several xrandr forms; return 0 if one succeeds.
+_xrandr_try_once() {
+  if xrandr --output "$OUT" --mode "$MODE" --rotate "$ROT" 2>/dev/null; then
+    return 0
+  fi
+  if xrandr --output "$OUT" --rotate "$ROT" 2>/dev/null; then
+    return 0
+  fi
+  # Current mode may be wrong name in .env; keep rotation.
+  if xrandr --output "$OUT" --auto --rotate "$ROT" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 XR_OK=0
 if command -v xrandr >/dev/null 2>&1; then
-  # One shot: mode + rotation (matches common DSI portrait panels used as landscape).
-  if xrandr --output "$OUT" --mode "$MODE" --rotate "$ROT" 2>/dev/null; then
-    logger -t meetingbox-kiosk "xrandr ok: --output $OUT --mode $MODE --rotate $ROT"
-    XR_OK=1
-  elif xrandr --output "$OUT" --rotate "$ROT" 2>/dev/null; then
-    logger -t meetingbox-kiosk "xrandr ok: --output $OUT --rotate $ROT (mode fallback)"
-    XR_OK=1
-  else
-    logger -t meetingbox-kiosk "xrandr: could not apply orientation for output '$OUT' (edit $ENV_FILE) — touch mapping will still be attempted"
+  # Optional: pick first connected output from `xrandr` when OUT is wrong (e.g. HDMI-1 vs DSI-1).
+  if [[ "${OUT}" == "auto" ]] || [[ "${OUT}" == "AUTO" ]]; then
+    picked=$(xrandr 2>/dev/null | awk '/ connected / { print $1; exit }')
+    if [[ -n "${picked}" ]]; then
+      OUT="$picked"
+      logger -t meetingbox-kiosk "xrandr: MEETINGBOX_PANEL_OUTPUT=auto -> using OUT=$OUT"
+    else
+      logger -t meetingbox-kiosk "xrandr: MEETINGBOX_PANEL_OUTPUT=auto but no connected output yet"
+    fi
+  fi
+
+  # GDM runs this very early; the X output sometimes appears a few seconds later — retry.
+  init_delay="${MEETINGBOX_XRANDR_INITIAL_DELAY:-0}"
+  if [[ "${init_delay}" =~ ^[0-9]+$ ]] && [[ "$init_delay" -gt 0 ]]; then
+    sleep "$init_delay"
+  fi
+  attempts="${MEETINGBOX_XRANDR_ATTEMPTS:-30}"
+  delay="${MEETINGBOX_XRANDR_RETRY_DELAY:-1}"
+  for ((i = 1; i <= attempts; i++)); do
+    if _xrandr_try_once; then
+      logger -t meetingbox-kiosk "xrandr ok: --output $OUT --mode $MODE --rotate $ROT (attempt $i/$attempts)"
+      XR_OK=1
+      break
+    fi
+    if [[ "$i" -eq 1 ]] || [[ "$i" -eq "$attempts" ]]; then
+      err=$(xrandr --output "$OUT" --mode "$MODE" --rotate "$ROT" 2>&1 | head -c 400)
+      logger -t meetingbox-kiosk "xrandr failed (attempt $i/$attempts) OUT=$OUT: ${err//$'\n'/ }"
+    fi
+    [[ "$i" -lt "$attempts" ]] && sleep "$delay"
+  done
+
+  if [[ "$XR_OK" -ne 1 ]]; then
+    logger -t meetingbox-kiosk "xrandr: rotation not applied after $attempts attempts — fix MEETINGBOX_PANEL_OUTPUT / MEETINGBOX_PANEL_MODE in $ENV_FILE (run: xrandr on the panel). Touch mapping will still run."
+    while IFS= read -r line; do
+      logger -t meetingbox-kiosk "xrandr: $line"
+    done < <(xrandr 2>/dev/null | head -25)
   fi
 else
-  logger -t meetingbox-kiosk "xrandr not installed; skipping mode/rotation (install x11-xserver-utils if needed)"
+  logger -t meetingbox-kiosk "xrandr not installed; skipping mode/rotation (apt install x11-xserver-utils)"
 fi
 
 # Build 3x3 from env; log if MEETINGBOX_TOUCH_COORD_MATRIX is set but unparsable (e.g. missing quotes → only one number).
