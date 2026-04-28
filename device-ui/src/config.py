@@ -408,8 +408,8 @@ LOG_TO_CONSOLE = os.getenv('LOG_TO_CONSOLE', '1') == '1'
 # PATHS
 # ============================================================================
 
-BASE_DIR = Path(__file__).parent.parent.resolve()
-ASSETS_DIR = BASE_DIR / 'assets'
+BASE_DIR = Path(os.getenv('MEETINGBOX_APP_DIR', Path(__file__).parent.parent)).expanduser().resolve()
+ASSETS_DIR = Path(os.getenv('MEETINGBOX_ASSETS_DIR', BASE_DIR / 'assets')).expanduser().resolve()
 FONTS_DIR = ASSETS_DIR / 'fonts'
 ICONS_DIR = ASSETS_DIR / 'icons'
 

@@ -11,6 +11,8 @@ sudo mkdir -p /etc/meetingbox
 sudo nano /etc/meetingbox/panel-xrandr.env
 ```
 
+The path must be **`panel-xrandr.env`** (with **xrandr**). A typo like **`panel-xrander.env`** will not be read by **`meetingbox-apply-kiosk-display-orientation`**.
+
 ---
 
 ## Step 2 — Paste this block, then edit the two **bold** parts
@@ -226,7 +228,7 @@ Do this **on the mini PC** in order (edit `/etc/meetingbox/panel-xrandr.env`, re
 
 5. **Kivy size must match X11** — In **`mini-pc/.env`** use **`MEETINGBOX_SYNC_DISPLAY_FROM_XRANDR=1`**, or set **`DISPLAY_WIDTH` / `DISPLAY_HEIGHT`** to the same **rotated** size **`xrandr`** reports. If the UI thinks the window is a different shape than X11, **buttons draw in the wrong place** relative to touch even when the matrix is correct.
 
-6. **Confirm one matrix** — Use **either** `MEETINGBOX_TOUCH_MATRIX_PRESET` **or** `MEETINGBOX_TOUCH_COORD_MATRIX`, not conflicting pairs.
+6. **Confirm one matrix** — Use **either** `MEETINGBOX_TOUCH_MATRIX_PRESET` **or** `MEETINGBOX_TOUCH_COORD_MATRIX`, not both. If both are set, **`MEETINGBOX_TOUCH_COORD_MATRIX` wins** and **`MEETINGBOX_TOUCH_MATRIX_PRESET` is ignored**. A common mistake: `MEETINGBOX_PANEL_ROTATE=right` and `MEETINGBOX_TOUCH_MATRIX_PRESET=right`, but **`MEETINGBOX_TOUCH_COORD_MATRIX="0 -1 1 1 0 0 0 0 1"`** — that nine-number form is **preset `left`** (90° CCW), not `right`, and will skew taps ~90°. For **`rotate right`**, either delete the coord line and keep **`PRESET=right`**, or set **`MEETINGBOX_TOUCH_COORD_MATRIX="0 1 0 -1 0 1 0 0 1"`** and remove the preset line.
 
 Then reinstall the orientation helper if you updated the repo:
 
