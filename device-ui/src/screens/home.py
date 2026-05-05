@@ -15,7 +15,7 @@ from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
 from async_helper import run_async
-from components.button import PrimaryButton
+from components.button import PrimaryButton, SecondaryButton
 from local_network import get_primary_ipv4
 from config import (
     ASSETS_DIR,
@@ -215,6 +215,8 @@ class HomeScreen(BaseScreen):
         btn_pad_b = max(14, int(22 * sv))
         # Row height minus bottom padding is the slot for the button; btn_h must fit inside.
         btn_row_h = max(72, int(88 * sv), btn_h + btn_pad_b + 8)
+        brief_btn_h = max(44, int(52 * sv))
+        brief_row_h = brief_btn_h + max(8, int(10 * sv))
         start_fs = int(FONT_SIZES["large"] * sv)
         sym_fs = int(FONT_SIZES["title"] * sv)
 
@@ -470,6 +472,25 @@ class HomeScreen(BaseScreen):
         btn_row.add_widget(self.start_btn)
         btn_row.add_widget(Widget())
         inner.add_widget(btn_row)
+
+        brief_row = BoxLayout(
+            orientation="horizontal",
+            size_hint=(1, None),
+            height=brief_row_h,
+            padding=[0, 0, 0, max(6, int(8 * sv))],
+        )
+        brief_row.add_widget(Widget())
+        self.briefing_btn = SecondaryButton(
+            text="Morning Briefing",
+            font_size=max(12, int(FONT_SIZES["medium"] * sv)),
+            size_hint=(None, None),
+            height=brief_btn_h,
+            width=min(btn_w, max(220, int(360 * sh))),
+        )
+        self.briefing_btn.bind(on_release=lambda *_: self.goto("briefing", transition="slide_left"))
+        brief_row.add_widget(self.briefing_btn)
+        brief_row.add_widget(Widget())
+        inner.add_widget(brief_row)
 
         mid_anchor.add_widget(inner)
         root.add_widget(mid_anchor)

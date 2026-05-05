@@ -162,6 +162,7 @@ from screens.processing import ProcessingScreen
 from screens.complete import CompleteScreen
 from screens.summary_review import SummaryReviewScreen
 from screens.error import ErrorScreen
+from screens.briefing import BriefingScreen
 
 # Settings & sub-screens
 from screens.settings import SettingsScreen
@@ -507,6 +508,7 @@ class MeetingBoxApp(App):
         self.screen_manager.add_widget(CompleteScreen(name='complete'))
         self.screen_manager.add_widget(SummaryReviewScreen(name='summary_review'))
         self.screen_manager.add_widget(ErrorScreen(name='error'))
+        self.screen_manager.add_widget(BriefingScreen(name='briefing'))
 
         self.screen_manager.add_widget(SettingsScreen(name='settings'))
         self.screen_manager.add_widget(AutoDeletePickerScreen(name='auto_delete_picker'))
